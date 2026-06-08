@@ -103,7 +103,7 @@ class RecordingWrapper:
             target_url,
         ]
 
-        result = subprocess.run(cmd)
+        result = subprocess.run(cmd, timeout=600)  # 10分钟超时，防止用户忘记关闭浏览器
 
         if not raw_script.exists():
             print("❌ codegen 未生成脚本，退出")
@@ -272,7 +272,7 @@ class RecordingWrapper:
                     "url": c.url,
                     "path": c.path,
                     "status": c.status,
-                    "request_body": c.request_body,
+                    "request_body": bool(c.request_body),
                     "response_body": c.response_body is not None,
                 }
                 for c in api_calls
@@ -373,6 +373,7 @@ class RecordingWrapper:
         # 检查 HAR 结果
         har_exists = api_har.exists()
         trace_exists = trace_file.exists()
+        business = []  # 初始化，避免 har_exists=False 时引用未定义变量
 
         if har_exists:
             from recorder.har_parser import HARParser
@@ -519,6 +520,7 @@ class RecordingWrapper:
 
         # ===== 4c. AI 深度分析：依赖推断（AI + 前端知识增强）=====
         # 将 APICall 对象转为 AIDependencyAnalyzer 所需的 dict 格式
+        # 截断大响应体，避免撑爆 AI prompt
         recordings = []
         for call in api_calls:
             rec = {
@@ -528,9 +530,9 @@ class RecordingWrapper:
                 "url": call.url,
             }
             if isinstance(call.request_body, dict):
-                rec["request_body"] = call.request_body
+                rec["request_body"] = self._truncate_for_ai(call.request_body, max_str_len=500)
             if isinstance(call.response_body, dict):
-                rec["response_body"] = call.response_body
+                rec["response_body"] = self._truncate_for_ai(call.response_body, max_str_len=500)
             recordings.append(rec)
 
         ai_deps = []
@@ -582,7 +584,7 @@ class RecordingWrapper:
     def _extract_ids_from_response(
         self, data: Any, prefix: str = "", max_depth: int = 5
     ) -> Dict[str, Any]:
-        """递归提取响应中的 ID 类字段"""
+        """递归提取响应中的 ID 类段"""
         if max_depth <= 0:
             return {}
 
@@ -606,6 +608,31 @@ class RecordingWrapper:
                                 self._extract_ids_from_response(item, f"{path}[{i}]", max_depth - 1)
                             )
         return ids
+
+    @staticmethod
+    def _truncate_for_ai(data: Any, max_str_len: int = 500, max_list: int = 10, depth: int = 0) -> Any:
+        """截断大数据结构，避免撑爆 AI prompt
+
+        - 字符串值超过 max_str_len 时截断
+        - 列表超过 max_list 项时只保留前 N 项
+        - 深度超过 5 层停止展开
+        """
+        if depth > 5:
+            return "...(截断)"
+        if isinstance(data, dict):
+            return {k: RecordingWrapper._truncate_for_ai(v, max_str_len, max_list, depth + 1)
+                    for k, v in data.items()}
+        if isinstance(data, list):
+            if len(data) > max_list:
+                items = [RecordingWrapper._truncate_for_ai(i, max_str_len, max_list, depth + 1)
+                         for i in data[:max_list]]
+                items.append(f"...(共{len(data)}项)")
+                return items
+            return [RecordingWrapper._truncate_for_ai(i, max_str_len, max_list, depth + 1)
+                    for i in data]
+        if isinstance(data, str) and len(data) > max_str_len:
+            return data[:max_str_len] + "...(截断)"
+        return data
 
     def _extract_params_from_request(self, data: Any, prefix: str = "", max_depth: int = 4) -> List[Dict]:
         """提取请求体中的参数名"""

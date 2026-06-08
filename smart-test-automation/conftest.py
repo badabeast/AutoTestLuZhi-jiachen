@@ -9,16 +9,10 @@ playwright-healer 自动注册 healing_page fixture（通过 pytest entry point�
 """
 
 import os
+from config.env_loader import load_env
 
-# 手动加载 .env（python-dotenv 不兼容 Python 3.14）
-_env_path = os.path.join(os.path.dirname(__file__), ".env")
-if os.path.exists(_env_path):
-    with open(_env_path, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if line and not line.startswith("#") and "=" in line:
-                key, value = line.split("=", 1)
-                os.environ.setdefault(key.strip(), value.strip())
+# 加载 .env（统一工具函数，支持引号和注释）
+load_env()
 
 import pytest
 
@@ -38,6 +32,8 @@ def healing_config():
     from playwright_healer.ai_providers import AIProviderConfig, AIProvider
 
     zcy_key = os.environ.get("ANTHROPIC_AUTH_TOKEN", "")
+    zcy_api_url = os.environ.get("PH_AI_API_URL",
+        "https://ai-platform.cai-inc.com/api/biz-ai/ai-model/api/11/apps/anthropic/v1/messages")
 
     return HealerConfig(
         providers=[
@@ -45,7 +41,7 @@ def healing_config():
                 provider=AIProvider.ANTHROPIC,
                 api_key=zcy_key,
                 model="glm-5.1",
-                api_url="https://ai-platform.cai-inc.com/api/biz-ai/ai-model/api/11/apps/anthropic/v1/messages",
+                api_url=zcy_api_url,
             )
         ],
         strategy=HealingStrategy.SMART,

@@ -25,15 +25,9 @@ from pathlib import Path
 project_root = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, project_root)
 
-# 加载 .env（CLI 直接运行时不会经过 conftest.py）
-_env_path = os.path.join(project_root, ".env")
-if os.path.exists(_env_path):
-    with open(_env_path, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if line and not line.startswith("#") and "=" in line:
-                key, value = line.split("=", 1)
-                os.environ.setdefault(key.strip(), value.strip())
+# 加载 .env（统一工具函数）
+from config.env_loader import load_env
+load_env()
 
 
 def main():

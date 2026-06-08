@@ -19,6 +19,7 @@
 import sys
 import os
 import json
+import time
 import argparse
 from pathlib import Path
 
@@ -68,7 +69,6 @@ def save_login_state(url: str, account: str = "", password: str = ""):
         page.wait_for_load_state("domcontentloaded", timeout=15000)
 
         # 自动填写账号密码（如果提供了）
-        import time
         time.sleep(int(os.environ.get("LOGIN_WAIT_SECONDS", "3")))
         if account:
             try:
@@ -107,7 +107,6 @@ def save_login_state(url: str, account: str = "", password: str = ""):
             # 关键修复：将 expires=-1 的 session cookie 改为 7 天后过期
             # Playwright storage_state 保存时，expires=-1 的 cookie 在新浏览器中会被忽略
             # 改为远期时间戳后，cookie 可以跨浏览器进程持久化
-            import time
             seven_days_later = time.time() + 7 * 24 * 3600  # 7 天后的 Unix 时间戳
             for cookie in state.get("cookies", []):
                 if cookie.get("expires", 0) == -1:

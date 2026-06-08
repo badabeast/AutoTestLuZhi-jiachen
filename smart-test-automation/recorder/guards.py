@@ -39,7 +39,7 @@ def do_login(page) -> bool:
             print("   🔐 使用录制登录操作...")
             try:
                 exec(login_code, {"page": page})
-                time.sleep(3)
+                # 等待页面离开登录状态，最多30秒
                 page.wait_for_load_state("networkidle", timeout=30000)
                 if not _is_on_login_page(page):
                     print(f"   ✅ 登录成功, URL: {page.url[:80]}")
@@ -76,7 +76,7 @@ def do_login(page) -> bool:
             pass
         if login_btn.count() > 0:
             login_btn.first.click()
-        time.sleep(5)
+        # 等待页面导航完成（登录后跳转）
         page.wait_for_load_state("networkidle", timeout=30000)
         if not _is_on_login_page(page):
             print(f"   ✅ 登录成功, URL: {page.url[:80]}")
@@ -182,18 +182,23 @@ def dismiss_dialogs(page) -> bool:
 # 安全操作 — 失败时自动重试（弹窗/登录恢复）
 # ============================================================
 
-def safe_click(page, locator, timeout: int = 10000, max_retries: int = 2) -> bool:
-    """安全点击 — 失败时检查弹窗遮挡并重试
+def _safe_action(page, action_fn, description: str, timeout: int = 10000, max_retries: int = 2) -> bool:
+    """通用安全操作 — 失败时检查弹窗遮挡/登录状态并重试
 
-    流程:
-      1. 尝试 click
-      2. 失败 → 检查是否有弹窗遮挡 → 关闭弹窗 → 重试
-      3. 仍然失败 → 检查是否被踢到登录页 → 登录恢复 → 重试
+    Args:
+        page: Playwright page 对象
+        action_fn: 执行操作的 callable，接收 timeout 参数
+        description: 操作描述（用于日志）
+        timeout: 操作超时时间
+        max_retries: 最大重试次数
+
+    Returns:
+        bool: 操作是否成功
     """
     last_error = None
     for attempt in range(max_retries + 1):
         try:
-            locator.click(timeout=timeout)
+            action_fn(timeout=timeout)
             return True
         except Exception as e:
             last_error = e
@@ -201,12 +206,12 @@ def safe_click(page, locator, timeout: int = 10000, max_retries: int = 2) -> boo
                 break
             # 检查是否被踢到登录页
             if _is_on_login_page(page):
-                print(f"   🔒 click 失败 + 在登录页，触发登录恢复")
+                print(f"   🔒 {description}失败 + 在登录页，触发登录恢复")
                 ensure_logged_in(page, page.url)
                 continue
             # 检查是否有遮挡弹窗
             if _has_blocking_dialog(page):
-                print(f"   ⚠️ click 失败，检测到遮挡弹窗，尝试关闭")
+                print(f"   ⚠️ {description}失败，检测到遮挡弹窗，尝试关闭")
                 dismiss_dialogs(page)
                 time.sleep(0.3)
                 continue
@@ -214,34 +219,22 @@ def safe_click(page, locator, timeout: int = 10000, max_retries: int = 2) -> boo
             page.keyboard.press("Escape")
             time.sleep(0.3)
     if last_error:
-        print(f"   ❌ safe_click 重试 {max_retries} 次仍失败: {last_error}")
+        print(f"   ❌ {description}重试 {max_retries} 次仍失败: {last_error}")
     return False
+
+
+def safe_click(page, locator, timeout: int = 10000, max_retries: int = 2) -> bool:
+    """安全点击 — 失败时检查弹窗遮挡并重试"""
+    return _safe_action(page, lambda timeout=timeout: locator.click(timeout=timeout),
+                        "click", timeout, max_retries)
 
 
 def safe_fill(page, locator, value: str, timeout: int = 10000, max_retries: int = 2) -> bool:
     """安全填充 — 失败时检查弹窗遮挡并重试"""
-    last_error = None
-    for attempt in range(max_retries + 1):
-        try:
-            locator.click(timeout=timeout)
-            locator.fill(value, timeout=timeout)
-            return True
-        except Exception as e:
-            last_error = e
-            if attempt >= max_retries:
-                break
-            if _is_on_login_page(page):
-                ensure_logged_in(page, page.url)
-                continue
-            if _has_blocking_dialog(page):
-                dismiss_dialogs(page)
-                time.sleep(0.3)
-                continue
-            page.keyboard.press("Escape")
-            time.sleep(0.3)
-    if last_error:
-        print(f"   ❌ safe_fill 重试 {max_retries} 次仍失败: {last_error}")
-    return False
+    def _do_fill(timeout=timeout):
+        locator.click(timeout=timeout)
+        locator.fill(value, timeout=timeout)
+    return _safe_action(page, _do_fill, "fill", timeout, max_retries)
 
 
 # ============================================================
