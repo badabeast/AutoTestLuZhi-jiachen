@@ -8,14 +8,14 @@ from .provider import (
     create_ai_provider,
     list_available_models,
     MODEL_REGISTRY,
-    # 轻量数据模型（替代已抛弃的 models/data_models.py）
+    # 轻量数据模型
     UIOperation,
     APICall,
     OperationIntent,
     SelectorOptimization,
     OptimizedScript,
 )
-from .dependency_analyzer import AIDependencyAnalyzer
+from .dependency_analyzer import SmartDependencyInferencer
 
 __all__ = [
     "AIProvider",
@@ -25,7 +25,7 @@ __all__ = [
     "create_ai_provider",
     "list_available_models",
     "MODEL_REGISTRY",
-    "AIDependencyAnalyzer",
+    "SmartDependencyInferencer",
     "UIOperation",
     "APICall",
     "OperationIntent",

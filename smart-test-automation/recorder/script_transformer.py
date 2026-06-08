@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import List, Optional, Dict
 
 
-class ScriptTransformer:
+class HealingScriptTransformer:
     """将 codegen 生成的脚本转换为 healer 兼容格式"""
 
     def transform(
@@ -186,14 +186,21 @@ Run with:
         # 一次性在最后一个 healing_page.xxx 操作行之后注入所有代码块
         source = self._inject_after_last_action(source, '\n'.join(injection_blocks))
 
-        # 9. 写入输出文件
+        # 9. 保存未清洗版本（完整版，调试用）
         output_dir = Path(output_path).parent
         output_dir.mkdir(parents=True, exist_ok=True)
+        raw_enhanced_path = output_dir / "enhanced_script_raw.py"
+        raw_enhanced_path.write_text(source, encoding='utf-8')
 
+        # 10. 清洗录制噪音（生成精简版）
+        source = self._clean_noise(source)
+
+        # 11. 写入精简版输出文件
         with open(output_path, 'w', encoding='utf-8') as f:
             f.write(source)
 
         print(f"✅ 转换完成: {input_path} → {output_path}")
+        print(f"   完整版备份: {raw_enhanced_path}")
         return source
 
     def generate_po_layers(
@@ -512,6 +519,118 @@ def test_{module_name}(healing_page) -> None:
             return "执行操作"
 
         return f"{module_name} 步骤 {index + 1}"
+
+    def _clean_noise(self, source: str) -> str:
+        """清洗 codegen 录制噪音，生成精简版脚本
+
+        安全规则（只在条件完全满足时才删除，绝不误杀）:
+          规则1: 同一选择器的 click → fill/click 序列中，fill 前的 click 删除
+                 条件: 选择器字符串完全匹配 + click 紧邻 fill
+          规则2: 同一选择器的连续 fill，只保留最后一个
+                 条件: 选择器字符串完全匹配 + 中间只有 press
+          规则3: 夹在两个同选择器 fill 之间的 press 删除
+                 条件: press 前后的 fill 选择器完全匹配
+
+        不清洗的模式（保留）:
+          - 不同选择器的 click/fill（是不同字段的操作）
+          - click 后没有 fill（是真正的点击操作）
+          - check/select_option 操作
+          - 非 fill 前的 press（如 press("Enter") 提交表单）
+        """
+        lines = source.split('\n')
+        # 解析操作行：提取选择器 + 操作类型
+        parsed = []
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            if not stripped.startswith('healing_page.') or stripped.startswith('#'):
+                parsed.append({"line_idx": i, "action": None, "selector": None, "keep": True})
+                continue
+
+            action, selector = self._parse_action_line(stripped)
+            parsed.append({"line_idx": i, "action": action, "selector": selector, "keep": True})
+
+        # 规则1: fill/click 前的同选择器 click 删除
+        for i in range(1, len(parsed)):
+            curr = parsed[i]
+            prev = parsed[i - 1]
+            if (curr["action"] in ("fill", "click") and
+                prev["action"] == "click" and
+                curr["selector"] and prev["selector"] and
+                curr["selector"] == prev["selector"]):
+                prev["keep"] = False
+
+        # 规则2+3: 同选择器的连续 fill + 夹在中间的 press，只保留最后一个 fill
+        i = 0
+        while i < len(parsed):
+            if parsed[i]["action"] != "fill" or not parsed[i]["selector"]:
+                i += 1
+                continue
+
+            # 找到连续的同选择器 fill/press 序列
+            selector = parsed[i]["selector"]
+            sequence_start = i
+            j = i + 1
+            while j < len(parsed):
+                if (parsed[j]["action"] == "fill" and parsed[j]["selector"] == selector):
+                    j += 1
+                elif (parsed[j]["action"] == "press" and parsed[j]["selector"] == selector):
+                    j += 1
+                else:
+                    break
+
+            sequence = parsed[sequence_start:j]
+            # 如果序列中有多个 fill，只保留最后一个
+            fill_indices = [k for k, p in enumerate(sequence) if p["action"] == "fill"]
+            if len(fill_indices) > 1:
+                # 标记最后一个 fill 之前的所有 fill 和 press 为不保留
+                last_fill = fill_indices[-1]
+                for k in range(last_fill):
+                    sequence[k]["keep"] = False
+
+            i = j
+
+        # 应用保留/删除
+        result_lines = []
+        removed_count = 0
+        for p in parsed:
+            if p["keep"]:
+                result_lines.append(lines[p["line_idx"]])
+            else:
+                removed_count += 1
+
+        if removed_count > 0:
+            print(f"   🧹 脚本清洗: 移除 {removed_count} 行录制噪音")
+
+        return '\n'.join(result_lines)
+
+    def _parse_action_line(self, line: str) -> tuple:
+        """解析 healing_page 操作行，提取 (action, selector)
+
+        Returns:
+            (action, selector) 如 ("fill", 'get_by_role("textbox", name="xxx")')
+            无法解析时返回 (None, None)
+        """
+        # 匹配 healing_page.SELECTOR.ACTION(...) 或 healing_page.SELECTOR.COMPOSED.ACTION(...)
+        # 先尝试提取最后的操作方法
+        action = None
+        for act in ["fill", "click", "press", "check", "select_option", "dblclick", "hover"]:
+            pattern = rf'\.{act}\('
+            if re.search(pattern, line):
+                action = act
+                break
+
+        if not action:
+            return (None, None)
+
+        # 提取选择器部分：healing_page.xxx.yyy.action 中的 healing_page.xxx.yyy
+        # 从 healing_page. 后面到 .action( 之前
+        action_pattern = rf'\.{action}\('
+        match = re.search(rf'healing_page\.(.+?){action_pattern}', line)
+        if match:
+            selector = "healing_page." + match.group(1)
+            return (action, selector)
+
+        return (action, None)
 
     def _inject_after_last_action(self, source: str, block: str) -> str:
         """在最后一个 healing_page.xxx 操作行之后注入代码块"""

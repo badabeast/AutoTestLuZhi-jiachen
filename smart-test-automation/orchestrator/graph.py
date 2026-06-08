@@ -10,7 +10,7 @@
 
 用法::
 
-    graph = DependencyGraph()
+    graph = TestChainGraph()
     graph.add_module(module_def)
     chain = graph.get_execution_chain("confirm_demand")
     # → ["create_demand", "audit_demand", "confirm_demand"]
@@ -32,7 +32,7 @@ class DependencyEdge:
     variables: Dict[str, str] = field(default_factory=dict)  # {当前模块参数名: 源模块变量名}
 
 
-class DependencyGraph:
+class TestChainGraph:
     """模块依赖图引擎
 
     AI 自动推断模块间依赖 → 拓扑排序计算前置链 → 支持人工确认编辑
@@ -157,7 +157,7 @@ class DependencyGraph:
             json.dump(data, f, ensure_ascii=False, indent=2)
 
     @classmethod
-    def load(cls, path: str = "knowledge/dependency_graph.json") -> "DependencyGraph":
+    def load(cls, path: str = "knowledge/dependency_graph.json") -> "TestChainGraph":
         """从 JSON 加载依赖图"""
         graph = cls()
         if not Path(path).exists():

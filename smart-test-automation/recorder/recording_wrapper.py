@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-RecordingWrapper — 两步录制编排器
+TwoStepRecorder — 两步录制编排器
 
 Step 1: 启动 Playwright codegen → 用户手动操作 → 保存 raw_script.py
 Step 2: 回放 raw_script + HAR + Trace → 无人值守 → 保存 api.har + trace.zip
@@ -11,7 +11,7 @@ Step 5: 生成增强脚本（healer 兼容）
 Step 6: 保存模块定义到 knowledge/
 
 用法::
-    wrapper = RecordingWrapper()
+    wrapper = TwoStepRecorder()
     result = wrapper.record("create_demand", "https://www.test.zcygov.cn/demand_front/")
 """
 
@@ -26,12 +26,12 @@ from pathlib import Path
 from string import Template
 from typing import Optional, Dict, List, Any
 
-from .codegen_parser import CodegenScriptParser
+from .codegen_parser import RecordingASTParser
 from .har_parser import HARParser
-from .script_transformer import ScriptTransformer
+from .script_transformer import HealingScriptTransformer
 
 
-class RecordingWrapper:
+class TwoStepRecorder:
     """两步录制编排器"""
 
     def __init__(
@@ -45,9 +45,9 @@ class RecordingWrapper:
         self.storage_state = storage_state
         self.viewport = viewport
         self.har_url_filter = har_url_filter
-        self.codegen_parser = CodegenScriptParser()
+        self.codegen_parser = RecordingASTParser()
         self.har_parser = HARParser(url_filter=har_url_filter)
-        self.script_transformer = ScriptTransformer()
+        self.script_transformer = HealingScriptTransformer()
 
     def record(
         self,
@@ -211,7 +211,7 @@ class RecordingWrapper:
                 print(f"   ⚠️ HAR 解析失败: {e}")
 
         # ===== Step 4: AI 分析（依赖推断 + 变量提取）=====
-        ai_analysis = self._ai_analyze(module_name, operations, api_calls)
+        ai_analysis = self._smart_analyze(module_name, operations, api_calls)
 
         # ===== Step 5: 生成增强脚本 =====
         enhanced_script = output_dir / "enhanced_script.py"
@@ -277,7 +277,7 @@ class RecordingWrapper:
                 }
                 for c in api_calls
             ],
-            "ai_analysis": ai_analysis,
+            "smart_analysis": ai_analysis,
         }
 
         # 保存到 output 目录的摘要
@@ -475,7 +475,7 @@ class RecordingWrapper:
         preprocessed.write_text(source, encoding='utf-8')
         return preprocessed
 
-    def _ai_analyze(
+    def _smart_analyze(
         self,
         module_name: str,
         operations: list,
@@ -484,7 +484,7 @@ class RecordingWrapper:
         """Step 4: AI 分析（依赖推断 + 变量提取）
 
         分析 API 响应中的可提取变量，以及与已录制模块的依赖关系。
-        优先使用 AIDependencyAnalyzer（AI + 前端知识增强），失败回退规则匹配。
+        优先使用 SmartDependencyInferencer（AI + 前端知识增强），失败回退规则匹配。
         """
         analysis: Dict[str, Any] = {
             "extract_vars": [],
@@ -519,7 +519,7 @@ class RecordingWrapper:
                 analysis.setdefault("input_params", []).extend(params)
 
         # ===== 4c. AI 深度分析：依赖推断（AI + 前端知识增强）=====
-        # 将 APICall 对象转为 AIDependencyAnalyzer 所需的 dict 格式
+        # 将 APICall 对象转为 SmartDependencyInferencer 所需的 dict 格式
         # 截断大响应体，避免撑爆 AI prompt
         recordings = []
         for call in api_calls:
@@ -530,23 +530,23 @@ class RecordingWrapper:
                 "url": call.url,
             }
             if isinstance(call.request_body, dict):
-                rec["request_body"] = self._truncate_for_ai(call.request_body, max_str_len=500)
+                rec["request_body"] = self._truncate_for_inference(call.request_body, max_str_len=500)
             if isinstance(call.response_body, dict):
-                rec["response_body"] = self._truncate_for_ai(call.response_body, max_str_len=500)
+                rec["response_body"] = self._truncate_for_inference(call.response_body, max_str_len=500)
             recordings.append(rec)
 
-        ai_deps = []
+        inferred_deps = []
         try:
-            from ai.dependency_analyzer import AIDependencyAnalyzer
-            analyzer = AIDependencyAnalyzer()
-            ai_deps = analyzer.analyze_dependencies(recordings)
-            if ai_deps:
-                print(f"   AI 推断依赖: {len(ai_deps)} 个")
+            from ai.dependency_analyzer import SmartDependencyInferencer
+            analyzer = SmartDependencyInferencer()
+            inferred_deps = analyzer.analyze_dependencies(recordings)
+            if inferred_deps:
+                print(f"   AI 推断依赖: {len(inferred_deps)} 个")
         except Exception as e:
             print(f"   ⚠️ AI 依赖分析失败: {e}，使用规则匹配回退")
 
         # AI 分析结果转换为模块依赖格式
-        for dep in ai_deps:
+        for dep in inferred_deps:
             analysis["dependencies"].append({
                 "from_sequence": dep.get("from_sequence"),
                 "from_field": dep.get("from_field"),
@@ -610,7 +610,7 @@ class RecordingWrapper:
         return ids
 
     @staticmethod
-    def _truncate_for_ai(data: Any, max_str_len: int = 500, max_list: int = 10, depth: int = 0) -> Any:
+    def _truncate_for_inference(data: Any, max_str_len: int = 500, max_list: int = 10, depth: int = 0) -> Any:
         """截断大数据结构，避免撑爆 AI prompt
 
         - 字符串值超过 max_str_len 时截断
@@ -620,15 +620,15 @@ class RecordingWrapper:
         if depth > 5:
             return "...(截断)"
         if isinstance(data, dict):
-            return {k: RecordingWrapper._truncate_for_ai(v, max_str_len, max_list, depth + 1)
+            return {k: TwoStepRecorder._truncate_for_inference(v, max_str_len, max_list, depth + 1)
                     for k, v in data.items()}
         if isinstance(data, list):
             if len(data) > max_list:
-                items = [RecordingWrapper._truncate_for_ai(i, max_str_len, max_list, depth + 1)
+                items = [TwoStepRecorder._truncate_for_inference(i, max_str_len, max_list, depth + 1)
                          for i in data[:max_list]]
                 items.append(f"...(共{len(data)}项)")
                 return items
-            return [RecordingWrapper._truncate_for_ai(i, max_str_len, max_list, depth + 1)
+            return [TwoStepRecorder._truncate_for_inference(i, max_str_len, max_list, depth + 1)
                     for i in data]
         if isinstance(data, str) and len(data) > max_str_len:
             return data[:max_str_len] + "...(截断)"
@@ -661,7 +661,7 @@ class RecordingWrapper:
 
         通过匹配当前模块请求参数中的 ID 值与已有模块提取变量来推断依赖。
         """
-        existing_vars = existing_module_def.get("ai_analysis", {}).get("extract_vars", [])
+        existing_vars = existing_module_def.get("smart_analysis", {}).get("extract_vars", [])
         if not existing_vars:
             return None
 
@@ -688,10 +688,10 @@ class RecordingWrapper:
         values = []
         if isinstance(data, dict):
             for v in data.values():
-                values.extend(RecordingWrapper._flatten_values(v))
+                values.extend(TwoStepRecorder._flatten_values(v))
         elif isinstance(data, list):
             for v in data:
-                values.extend(RecordingWrapper._flatten_values(v))
+                values.extend(TwoStepRecorder._flatten_values(v))
         elif isinstance(data, str) and data:
             values.append(data)
         return values

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-CodegenScriptParser — 用 AST 解析 Playwright codegen 生成的 Python 脚本
+RecordingASTParser — 用 AST 解析 Playwright codegen 生成的 Python 脚本
 
 从 codegen 输出的 Python-pytest 脚本中提取 UI 操作序列：
   page.get_by_role('button', name='提交').click()
@@ -61,11 +61,11 @@ ACTION_METHOD_MAP = {
 VALUE_ACTIONS = {"fill", "type", "press", "select_option", "set_input_files", "goto"}
 
 
-class CodegenScriptParser:
+class RecordingASTParser:
     """用 AST 解析 Playwright codegen 生成的 Python-pytest 脚本
 
     用法::
-        parser = CodegenScriptParser()
+        parser = RecordingASTParser()
         ops = parser.parse("output/modules/create_demand/raw_script.py")
         for op in ops:
             print(f"Step {op.step_index}: {op.action} {op.selector_type}={op.selector_value}")

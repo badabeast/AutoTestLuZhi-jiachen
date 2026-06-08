@@ -73,8 +73,8 @@ def test_create_demand(page: Page):
 ''', encoding='utf-8')
 
     # 用真实的 AST 解析器解析
-    from recorder.codegen_parser import CodegenScriptParser
-    parser = CodegenScriptParser()
+    from recorder.codegen_parser import RecordingASTParser
+    parser = RecordingASTParser()
     operations = parser.parse(str(raw_script))
     print(f"  ✅ AST 解析完成: {len(operations)} 个 UI 操作")
     for op in operations:
@@ -185,7 +185,7 @@ def test_create_demand(page: Page):
             {"step_index": c.step_index, "method": c.method, "path": c.path, "status": c.status}
             for c in api_calls
         ],
-        "ai_analysis": {
+        "smart_analysis": {
             "extract_vars": [
                 {"name": "demand_id", "from_api": "POST /demand/create",
                  "from_field": "data.id", "example_value": "XQ-2026-00518964"}
@@ -211,7 +211,7 @@ def test_create_demand(page: Page):
     audit_def = {
         "module_name": "audit_demand_demo",
         "target_url": "https://www.test.zcygov.cn/demand_front/",
-        "ai_analysis": {
+        "smart_analysis": {
             "extract_vars": [
                 {"name": "audit_result", "from_api": "POST /demand/audit", "from_field": "data.result"}
             ],
@@ -227,7 +227,7 @@ def test_create_demand(page: Page):
     confirm_def = {
         "module_name": "confirm_demand_demo",
         "target_url": "https://www.test.zcygov.cn/demand_front/",
-        "ai_analysis": {
+        "smart_analysis": {
             "extract_vars": [],
             "input_params": [
                 {"name": "demand_id", "source": "从上游模块注入"},
@@ -239,8 +239,8 @@ def test_create_demand(page: Page):
     save_module_definition("confirm_demand_demo", confirm_def)
 
     # AI 推断
-    from orchestrator.ai_inference import AIDependencyInference
-    inferencer = AIDependencyInference()
+    from orchestrator.smart_inference import CrossModuleInferencer
+    inferencer = CrossModuleInferencer()
     deps = inferencer.infer_all()
     print(f"  ✅ AI 推断完成: 发现 {len(deps)} 条依赖关系")
     for dep in deps:

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-AI 依赖推断器
+智能跨模块依赖推断器
 
 使用 AI 分析模块间的依赖关系：
   1. 分析 API 请求序列中的数据流（前一个接口返回的 ID 被后一个接口使用）
@@ -10,7 +10,7 @@ AI 依赖推断器
 
 用法::
 
-    inferencer = AIDependencyInference()
+    inferencer = CrossModuleInferencer()
     deps = inferencer.infer_cross_module("create_demand", "audit_demand")
 """
 
@@ -22,7 +22,7 @@ from typing import Dict, List, Optional, Any
 from knowledge import load_module_definition, list_modules
 
 
-class AIDependencyInference:
+class CrossModuleInferencer:
     """AI 依赖推断器"""
 
     def __init__(self):
@@ -52,12 +52,12 @@ class AIDependencyInference:
 
         # 提取模块 A 的产出变量
         a_outputs = set()
-        for var in def_a.get("ai_analysis", {}).get("extract_vars", []):
+        for var in def_a.get("smart_analysis", {}).get("extract_vars", []):
             a_outputs.add(var.get("name", ""))
 
         # 提取模块 B 的输入参数
         b_inputs = set()
-        for var in def_b.get("ai_analysis", {}).get("input_params", []):
+        for var in def_b.get("smart_analysis", {}).get("input_params", []):
             b_inputs.add(var.get("name", ""))
 
         # 匹配：如果 B 的输入参数名包含 A 的产出变量名

@@ -1,5 +1,5 @@
 """编排引擎模块"""
 
-from .orchestrator import TestOrchestrator
+from .orchestrator import TestChainOrchestrator
 
-__all__ = ["TestOrchestrator"]
+__all__ = ["TestChainOrchestrator"]

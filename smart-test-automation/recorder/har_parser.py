@@ -127,9 +127,13 @@ class HARParser:
         business_calls = []
         for call in all_calls:
             path_lower = call.path.lower()
+            mime_lower = call.mime_type.lower()
 
             # 跳过静态资源
             if any(path_lower.endswith(ext) for ext in static_extensions):
+                continue
+            # 跳过 HTML 页面请求（SPA 页面跳转，非业务 API）
+            if "text/html" in mime_lower:
                 continue
             # 跳过 favicon/robots
             if path_lower.endswith('/favicon.ico') or path_lower.endswith('/robots.txt'):
@@ -187,23 +191,58 @@ class HARParser:
                 return {"_raw": text[:2000], "_parse_error": True}
         return {"_raw": text[:2000], "_mime": mime}
 
+    # 大 JSON 截断保护：响应体最大保留字符数
+    MAX_RESPONSE_CHARS = 20000
+    # 列表类型响应最多保留的元素数
+    MAX_LIST_ITEMS = 20
+
     def _parse_response_content(self, content: dict) -> Optional[Any]:
-        """解析响应体
+        """解析响应体（含大 JSON 截断保护）
 
         HAR 中响应体在 content.text 字段。
         只解析 JSON 响应，非 JSON（图片/CSS等）返回 None。
+        大 JSON 响应会截断列表和整体大小，避免撑爆内存和 AI prompt。
         """
         text = content.get("text", "")
         if not text:
             return None
 
+        # 超大文本先截断原始内容（防止 json.loads 消耗过多内存）
+        if len(text) > self.MAX_RESPONSE_CHARS:
+            text = text[:self.MAX_RESPONSE_CHARS]
+
         mime = content.get("mimeType", "")
         if "json" in mime:
             try:
-                return json.loads(text)
+                data = json.loads(text)
+                # 截断大 JSON：列表只保留前 N 项，整体限制大小
+                return self._truncate_large_json(data)
             except json.JSONDecodeError:
-                # 非 JSON 或截断的 JSON
+                # 截断后 JSON 不完整，尝试找到最后一个完整对象
                 return {"_raw": text[:5000], "_parse_error": True}
 
         # 非 JSON 响应不存储（图片、CSS、JS 等太大且无用）
         return None
+
+    def _truncate_large_json(self, data: Any, depth: int = 0) -> Any:
+        """递归截断大 JSON 结构
+
+        - 列表最多保留 MAX_LIST_ITEMS 个元素
+        - 深度超过 6 层不再展开
+        - 保留对象的所有键（键名有语义信息）
+        """
+        if depth > 6:
+            return "...(深层嵌套已截断)"
+
+        if isinstance(data, list):
+            # 列表过长只保留前 N 项 + 截断提示
+            if len(data) > self.MAX_LIST_ITEMS:
+                truncated = [self._truncate_large_json(item, depth + 1) for item in data[:self.MAX_LIST_ITEMS]]
+                truncated.append(f"...(共{len(data)}项，已截断)")
+                return truncated
+            return [self._truncate_large_json(item, depth + 1) for item in data]
+
+        if isinstance(data, dict):
+            return {k: self._truncate_large_json(v, depth + 1) for k, v in data.items()}
+
+        return data

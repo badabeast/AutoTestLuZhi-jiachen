@@ -8,7 +8,7 @@
 用法::
 
     graph = DependencyGraph.load()
-    composer = Composer()
+    composer = ExecutionPlanComposer()
     plan = composer.compose("confirm_demand", graph)
     # plan.chain = ["create_demand", "audit_demand", "confirm_demand"]
     # plan.steps[0].needs = {}
@@ -57,7 +57,7 @@ class ExecutionPlan:
         }
 
 
-class Composer:
+class ExecutionPlanExecutionPlanComposer:
     """执行计划编排器"""
 
     def compose(

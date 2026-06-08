@@ -1,0 +1,162 @@
+[
+  {
+    "id": "7e6354e9-fb9a-4e7c-b820-66f93827afe9",
+    "type": "click",
+    "selector": "locator('#__operate__')",
+    "frame_index": null,
+    "tab_id": null,
+    "value": null,
+    "timestamp": 1779964780.624,
+    "duration": 0.0,
+    "metadata": {
+      "tagName": "DIV",
+      "inputType": "",
+      "button": 0,
+      "clientX": 1239,
+      "clientY": 159,
+      "checked": false
+    },
+    "related_api_ids": [],
+    "error": null
+  },
+  {
+    "id": "bf8daa83-81af-481c-ad66-584c262a4ca1",
+    "type": "click",
+    "selector": "getByRole('button', { name: '搜索' })",
+    "frame_index": null,
+    "tab_id": null,
+    "value": null,
+    "timestamp": 1779964781.141,
+    "duration": 0.0,
+    "metadata": {
+      "tagName": "BUTTON",
+      "inputType": "button",
+      "button": 0,
+      "clientX": 1250,
+      "clientY": 146,
+      "checked": false
+    },
+    "related_api_ids": [],
+    "error": null
+  },
+  {
+    "id": "c7f4f6a5-1e10-47a3-afd3-23f2251e3e13",
+    "type": "click",
+    "selector": "getByRole('link', { name: '确认' })",
+    "frame_index": null,
+    "tab_id": null,
+    "value": null,
+    "timestamp": 1779964783.713,
+    "duration": 0.0,
+    "metadata": {
+      "tagName": "A",
+      "inputType": "",
+      "button": 0,
+      "clientX": 1143,
+      "clientY": 483,
+      "checked": false
+    },
+    "related_api_ids": [],
+    "error": null
+  },
+  {
+    "id": "14ed62c0-cd32-4f6e-970e-2cbea01dc815",
+    "type": "click",
+    "selector": "getByRole('button', { name: '审核' })",
+    "frame_index": null,
+    "tab_id": null,
+    "value": null,
+    "timestamp": 1779964787.492,
+    "duration": 0.0,
+    "metadata": {
+      "tagName": "BUTTON",
+      "inputType": "button",
+      "button": 0,
+      "clientX": 1327,
+      "clientY": 75,
+      "checked": false
+    },
+    "related_api_ids": [],
+    "error": null
+  },
+  {
+    "id": "5b2a30f1-0444-4d28-9053-17bd99eea562",
+    "type": "click",
+    "selector": "getByRole('button', { name: '确定' })",
+    "frame_index": null,
+    "tab_id": null,
+    "value": null,
+    "timestamp": 1779964790.512,
+    "duration": 0.0,
+    "metadata": {
+      "tagName": "BUTTON",
+      "inputType": "button",
+      "button": 0,
+      "clientX": 989,
+      "clientY": 555,
+      "checked": false
+    },
+    "related_api_ids": [],
+    "error": null
+  },
+  {
+    "id": "14eceda3-b3bd-4dac-b71c-93db7a59259a",
+    "type": "click",
+    "selector": "getByRole('link', { name: '审核' })",
+    "frame_index": null,
+    "tab_id": null,
+    "value": null,
+    "timestamp": 1779964793.862,
+    "duration": 0.0,
+    "metadata": {
+      "tagName": "A",
+      "inputType": "",
+      "button": 0,
+      "clientX": 1143,
+      "clientY": 532,
+      "checked": false
+    },
+    "related_api_ids": [],
+    "error": null
+  },
+  {
+    "id": "6436bca5-4128-4d6f-9c4b-fa48065def9e",
+    "type": "click",
+    "selector": "getByRole('button', { name: '审核' })",
+    "frame_index": null,
+    "tab_id": null,
+    "value": null,
+    "timestamp": 1779964796.531,
+    "duration": 0.0,
+    "metadata": {
+      "tagName": "BUTTON",
+      "inputType": "button",
+      "button": 0,
+      "clientX": 1328,
+      "clientY": 73,
+      "checked": false
+    },
+    "related_api_ids": [],
+    "error": null
+  },
+  {
+    "id": "9deda566-1b46-4c5b-8893-3a4c40cff474",
+    "type": "click",
+    "selector": "getByRole('button', { name: '确定' })",
+    "frame_index": null,
+    "tab_id": null,
+    "value": null,
+    "timestamp": 1779964800.83,
+    "duration": 0.0,
+    "metadata": {
+      "tagName": "BUTTON",
+      "inputType": "button",
+      "button": 0,
+      "clientX": 990,
+      "clientY": 630,
+      "checked": false
+    },
+    "related_api_ids": [],
+    "error": null
+  }
+]

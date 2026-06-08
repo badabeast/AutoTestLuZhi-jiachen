@@ -1,0 +1,12 @@
+{
+  "version": "1.0",
+  "id": "3b6f7c11",
+  "name": "headless_test",
+  "start_time": "2026-05-28T18:22:38.247443",
+  "end_time": "2026-05-28T18:22:53.464331",
+  "url": "https://www.test.zcygov.cn/demand_front/#/review/demand/waitReview?_app_=zcy.demand",
+  "operation_count": 0,
+  "api_call_count": 4,
+  "error_count": 0,
+  "metadata": {}
+}

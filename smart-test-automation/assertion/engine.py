@@ -11,7 +11,7 @@
 
 用法::
 
-    engine = AssertionEngine()
+    engine = ThreeLayerAssertionEngine()
     results = engine.run_assertions(assertions, context={"page": page, "api_calls": calls})
     report = engine.generate_report(results)
 """
@@ -29,7 +29,7 @@ from .db_assertion import assert_db
 from .report import generate_report, save_report as _save_report
 
 
-class AssertionEngine:
+class ThreeLayerAssertionEngine:
     """三层断言引擎（统一入口）"""
 
     def run_assertions(

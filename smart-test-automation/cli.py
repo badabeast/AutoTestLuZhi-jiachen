@@ -97,7 +97,7 @@ def main():
 
     # ===== record =====
     if args.command == "record":
-        from recorder.recording_wrapper import RecordingWrapper
+        from recorder.recording_wrapper import TwoStepRecorder
 
         url = args.url
         if not url:
@@ -116,7 +116,7 @@ def main():
             print("❌ 无法获取录制URL，退出")
             sys.exit(1)
 
-        wrapper = RecordingWrapper(
+        wrapper = TwoStepRecorder(
             storage_state=args.storage_state,
             har_url_filter=args.har_filter,
         )
@@ -140,8 +140,8 @@ def main():
             print(f"❌ 未找到 raw_script.py: {raw_script}")
             sys.exit(1)
 
-        from recorder.recording_wrapper import RecordingWrapper
-        wrapper = RecordingWrapper(storage_state=args.storage_state)
+        from recorder.recording_wrapper import TwoStepRecorder
+        wrapper = TwoStepRecorder(storage_state=args.storage_state)
         result = wrapper.replay(
             module_name=args.module_name,
             headless=not args.headed,
@@ -151,7 +151,7 @@ def main():
 
     # ===== run =====
     elif args.command == "run":
-        from orchestrator.orchestrator import TestOrchestrator
+        from orchestrator.orchestrator import TestChainOrchestrator
 
         # 解析 --var key=value
         variables = {}
@@ -160,7 +160,7 @@ def main():
                 k, val = v.split("=", 1)
                 variables[k.strip()] = val.strip()
 
-        orch = TestOrchestrator()
+        orch = TestChainOrchestrator()
         report = orch.run(
             target_module=args.target_module,
             headed=args.headed,
@@ -178,12 +178,12 @@ def main():
 
     # ===== compose（查看编排计划，不执行）=====
     elif args.command == "compose":
-        from orchestrator.graph import DependencyGraph
-        from orchestrator.composer import Composer
+        from orchestrator.graph import TestChainGraph
+        from orchestrator.composer import ExecutionPlanComposer
         from knowledge import load_module_definition, list_modules, load_dependency_graph
         from orchestrator.module_definition import ModuleDefinition
 
-        graph = DependencyGraph()
+        graph = TestChainGraph()
 
         # 从 knowledge 加载模块到图
         for mod_name in list_modules():
@@ -220,8 +220,8 @@ def main():
             print(f"❌ 未找到 raw_script.py: {module_dir}")
             sys.exit(1)
 
-        from recorder.script_transformer import ScriptTransformer
-        transformer = ScriptTransformer()
+        from recorder.script_transformer import HealingScriptTransformer
+        transformer = HealingScriptTransformer()
 
         # 解析 extract_vars
         extract_vars = []
@@ -330,8 +330,8 @@ def main():
 
         elif args.frontend:
             # 查看前端知识文档
-            from knowledge.frontend_loader import FrontendKnowledgeLoader
-            loader = FrontendKnowledgeLoader()
+            from knowledge.frontend_loader import FrontendKnowledgeBase
+            loader = FrontendKnowledgeBase()
             docs = loader.list_docs()
             if not docs:
                 print("📚 未找到前端知识文档")
@@ -343,8 +343,8 @@ def main():
 
         elif args.api:
             # 按 API 路径搜索前端知识
-            from knowledge.frontend_loader import FrontendKnowledgeLoader
-            loader = FrontendKnowledgeLoader()
+            from knowledge.frontend_loader import FrontendKnowledgeBase
+            loader = FrontendKnowledgeBase()
             result = loader.load_for_api(args.api)
             if result:
                 print(f"📚 API `{args.api}` 相关知识:")

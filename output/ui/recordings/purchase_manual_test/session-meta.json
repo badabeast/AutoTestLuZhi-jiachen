@@ -1,0 +1,12 @@
+{
+  "version": "1.0",
+  "id": "96bf2ba6-edbb-42d7-bbe3-2f9a7668a8ea",
+  "name": "purchase_manual_test",
+  "start_time": "2026-06-01T19:28:57.180297",
+  "end_time": "2026-06-01T19:38:57.143436",
+  "url": "https://www.test.zcygov.cn/demand_front/#/review/demand/waitReview?_app_=zcy.demand",
+  "operation_count": 20,
+  "api_call_count": 3,
+  "error_count": 0,
+  "metadata": {}
+}

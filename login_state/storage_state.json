@@ -1,0 +1,58 @@
+{
+  "cookies": [
+    {
+      "name": "_zcy_log_client_uuid",
+      "value": "27e91850-5a7f-11f1-b3e1-cf5929e6f05b",
+      "domain": ".zcygov.cn",
+      "path": "/",
+      "expires": 1814523760.213963,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "SESSION",
+      "value": "ZTAyZGJmYzQtZDkzMS00YThmLTk0Y2YtODkzZDViNDZjNjlm",
+      "domain": ".test.zcygov.cn",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": true,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "SSOSESSION",
+      "value": "ZTNmMGM1YTAtNTkxMi00YzM5LTg3NzQtMGI0ODAyMDQ3Nzlm",
+      "domain": "login.test.zcygov.cn",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "None"
+    }
+  ],
+  "origins": [
+    {
+      "origin": "https://login.test.zcygov.cn",
+      "localStorage": [
+        {
+          "name": "caiBao_frontEnd",
+          "value": "{\"caiBaoAnimationState\":\"show\",\"isLogin\":false,\"translateY\":0,\"expirationTime\":0}"
+        }
+      ]
+    },
+    {
+      "origin": "https://www.test.zcygov.cn",
+      "localStorage": [
+        {
+          "name": "caiBao_frontEnd",
+          "value": "{\"caiBaoAnimationState\":\"show\",\"isLogin\":false,\"translateY\":0,\"expirationTime\":0}"
+        },
+        {
+          "name": "_zcy_log_client_uuid",
+          "value": "27e91850-5a7f-11f1-b3e1-cf5929e6f05b"
+        }
+      ]
+    }
+  ]
+}

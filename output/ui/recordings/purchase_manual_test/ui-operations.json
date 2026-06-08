@@ -1,0 +1,378 @@
+[
+  {
+    "id": "598eeb61-3452-491d-97b8-976478872728",
+    "type": "click",
+    "selector": "locator('div')",
+    "frame_index": null,
+    "tab_id": null,
+    "value": null,
+    "timestamp": 1780313371.139,
+    "duration": 0.0,
+    "metadata": {
+      "tagName": "DIV",
+      "inputType": "",
+      "button": 0,
+      "clientX": 147,
+      "clientY": 273,
+      "checked": false
+    },
+    "related_api_ids": [],
+    "error": null
+  },
+  {
+    "id": "82d04d30-15e6-4dab-b679-a53e38ab3a15",
+    "type": "click",
+    "selector": "getByLabel('创建采购任务')",
+    "frame_index": null,
+    "tab_id": null,
+    "value": null,
+    "timestamp": 1780313372.591,
+    "duration": 0.0,
+    "metadata": {
+      "tagName": "SPAN",
+      "inputType": "",
+      "button": 0,
+      "clientX": 110,
+      "clientY": 306,
+      "checked": false
+    },
+    "related_api_ids": [],
+    "error": null
+  },
+  {
+    "id": "91f3e3e5-3da3-4553-abc6-80c842a433f9",
+    "type": "click",
+    "selector": "getByRole('button', { name: '高级' })",
+    "frame_index": null,
+    "tab_id": null,
+    "value": null,
+    "timestamp": 1780313374.156,
+    "duration": 0.0,
+    "metadata": {
+      "tagName": "BUTTON",
+      "inputType": "submit",
+      "button": 0,
+      "clientX": 405,
+      "clientY": 419,
+      "checked": false
+    },
+    "related_api_ids": [],
+    "error": null
+  },
+  {
+    "id": "f1aeb1f7-6f15-419d-a786-9b5a05fcbb9b",
+    "type": "click",
+    "selector": "getByRole('link', { name: '继续前往test.zcygov.cn（不安全）' })",
+    "frame_index": null,
+    "tab_id": null,
+    "value": null,
+    "timestamp": 1780313374.955,
+    "duration": 0.0,
+    "metadata": {
+      "tagName": "A",
+      "inputType": "",
+      "button": 0,
+      "clientX": 423,
+      "clientY": 553,
+      "checked": false
+    },
+    "related_api_ids": [],
+    "error": null
+  },
+  {
+    "id": "4d9aa49f-a8a5-493b-9954-1fe8b591ebf7",
+    "type": "click",
+    "selector": "getByRole('link', { name: '创建采购任务' })",
+    "frame_index": null,
+    "tab_id": null,
+    "value": null,
+    "timestamp": 1780313389.057,
+    "duration": 0.0,
+    "metadata": {
+      "tagName": "A",
+      "inputType": "text",
+      "button": 0,
+      "clientX": 1235,
+      "clientY": 391,
+      "checked": false
+    },
+    "related_api_ids": [],
+    "error": null
+  },
+  {
+    "id": "9239ab97-07fd-449d-a3ba-f5c2e428c949",
+    "type": "click",
+    "selector": "getByRole('textbox', { name: '请输入' })",
+    "frame_index": null,
+    "tab_id": null,
+    "value": null,
+    "timestamp": 1780313390.754,
+    "duration": 0.0,
+    "metadata": {
+      "tagName": "INPUT",
+      "inputType": "text",
+      "button": 0,
+      "clientX": 505,
+      "clientY": 307,
+      "checked": false
+    },
+    "related_api_ids": [],
+    "error": null
+  },
+  {
+    "id": "b1291629-5cf4-41ad-93e6-7f10dd8e8469",
+    "type": "fill",
+    "selector": "getByRole('textbox', { name: '请输入' })",
+    "frame_index": null,
+    "tab_id": null,
+    "value": "wo",
+    "timestamp": 1780313393.736,
+    "duration": 0.0,
+    "metadata": {
+      "tagName": "INPUT",
+      "inputType": "text",
+      "checked": false
+    },
+    "related_api_ids": [],
+    "error": null
+  },
+  {
+    "id": "4704039b-e692-4064-bba0-7c8beae56558",
+    "type": "fill",
+    "selector": "getByRole('textbox', { name: '请输入' })",
+    "frame_index": null,
+    "tab_id": null,
+    "value": null,
+    "timestamp": 1780313394.489,
+    "duration": 0.0,
+    "metadata": {
+      "tagName": "INPUT",
+      "inputType": "text",
+      "checked": false
+    },
+    "related_api_ids": [],
+    "error": null
+  },
+  {
+    "id": "f882d86d-fe33-46e2-b2ad-c77ead466f28",
+    "type": "fill",
+    "selector": "getByRole('textbox', { name: '请输入' })",
+    "frame_index": null,
+    "tab_id": null,
+    "value": "zhe",
+    "timestamp": 1780313395.373,
+    "duration": 0.0,
+    "metadata": {
+      "tagName": "INPUT",
+      "inputType": "text",
+      "checked": false
+    },
+    "related_api_ids": [],
+    "error": null
+  },
+  {
+    "id": "a21a51eb-7545-4c9f-bd81-424c5456aa2f",
+    "type": "fill",
+    "selector": "getByRole('textbox', { name: '请输入' })",
+    "frame_index": null,
+    "tab_id": null,
+    "value": null,
+    "timestamp": 1780313397.046,
+    "duration": 0.0,
+    "metadata": {
+      "tagName": "INPUT",
+      "inputType": "text",
+      "checked": false
+    },
+    "related_api_ids": [],
+    "error": null
+  },
+  {
+    "id": "2ecaa84d-dfb8-4884-b55c-d60a5e3916ba",
+    "type": "fill",
+    "selector": "getByRole('textbox', { name: '请输入' })",
+    "frame_index": null,
+    "tab_id": null,
+    "value": "zh",
+    "timestamp": 1780313398.71,
+    "duration": 0.0,
+    "metadata": {
+      "tagName": "INPUT",
+      "inputType": "text",
+      "checked": false
+    },
+    "related_api_ids": [],
+    "error": null
+  },
+  {
+    "id": "d7598454-992f-41e5-8a90-5f55786a498d",
+    "type": "fill",
+    "selector": "getByRole('textbox', { name: '请输入' })",
+    "frame_index": null,
+    "tab_id": null,
+    "value": null,
+    "timestamp": 1780313399.342,
+    "duration": 0.0,
+    "metadata": {
+      "tagName": "INPUT",
+      "inputType": "text",
+      "checked": false
+    },
+    "related_api_ids": [],
+    "error": null
+  },
+  {
+    "id": "fde615f0-07f7-4e0e-9afd-38e9000da54a",
+    "type": "fill",
+    "selector": "getByRole('textbox', { name: '请输入' })",
+    "frame_index": null,
+    "tab_id": null,
+    "value": "liu",
+    "timestamp": 1780313400.276,
+    "duration": 0.0,
+    "metadata": {
+      "tagName": "INPUT",
+      "inputType": "text",
+      "checked": false
+    },
+    "related_api_ids": [],
+    "error": null
+  },
+  {
+    "id": "80a750b1-cba6-46a6-9bb5-e93097c9ede3",
+    "type": "fill",
+    "selector": "getByRole('textbox', { name: '请输入' })",
+    "frame_index": null,
+    "tab_id": null,
+    "value": "录制",
+    "timestamp": 1780313402.171,
+    "duration": 0.0,
+    "metadata": {
+      "tagName": "INPUT",
+      "inputType": "text",
+      "checked": false
+    },
+    "related_api_ids": [],
+    "error": null
+  },
+  {
+    "id": "c496ca78-daaa-43e4-930b-d53a0b09eda5",
+    "type": "fill",
+    "selector": "getByRole('textbox', { name: '请输入' })",
+    "frame_index": null,
+    "tab_id": null,
+    "value": "录制采购任务",
+    "timestamp": 1780313403.965,
+    "duration": 0.0,
+    "metadata": {
+      "tagName": "INPUT",
+      "inputType": "text",
+      "checked": false
+    },
+    "related_api_ids": [],
+    "error": null
+  },
+  {
+    "id": "9844b76f-2d59-4704-b0c5-2c23d7f37db8",
+    "type": "click",
+    "selector": "getByRole('button', { name: '确定' })",
+    "frame_index": null,
+    "tab_id": null,
+    "value": null,
+    "timestamp": 1780313405.493,
+    "duration": 0.0,
+    "metadata": {
+      "tagName": "BUTTON",
+      "inputType": "button",
+      "button": 0,
+      "clientX": 1113,
+      "clientY": 475,
+      "checked": false
+    },
+    "related_api_ids": [],
+    "error": null
+  },
+  {
+    "id": "63885174-8adb-4d59-a46d-8d522a658737",
+    "type": "click",
+    "selector": "getByRole('button', { name: '查看采购任务' })",
+    "frame_index": null,
+    "tab_id": null,
+    "value": null,
+    "timestamp": 1780313407.746,
+    "duration": 0.0,
+    "metadata": {
+      "tagName": "BUTTON",
+      "inputType": "button",
+      "button": 0,
+      "clientX": 728,
+      "clientY": 467,
+      "checked": false
+    },
+    "related_api_ids": [],
+    "error": null
+  },
+  {
+    "id": "100fa377-2100-49ce-96cb-8a1e8cd96e5e",
+    "type": "click",
+    "selector": "getByRole('button', { name: '返回' })",
+    "frame_index": null,
+    "tab_id": null,
+    "value": null,
+    "timestamp": 1780313411.741,
+    "duration": 0.0,
+    "metadata": {
+      "tagName": "BUTTON",
+      "inputType": "button",
+      "button": 0,
+      "clientX": 1223,
+      "clientY": 77,
+      "checked": false
+    },
+    "related_api_ids": [],
+    "error": null
+  },
+  {
+    "id": "d9539141-b44a-49db-b83f-bfeb218b940f",
+    "type": "click",
+    "selector": "getByRole('tab')",
+    "frame_index": null,
+    "tab_id": null,
+    "value": null,
+    "timestamp": 1780313413.654,
+    "duration": 0.0,
+    "metadata": {
+      "tagName": "DIV",
+      "inputType": "",
+      "button": 0,
+      "clientX": 261,
+      "clientY": 200,
+      "checked": false
+    },
+    "related_api_ids": [],
+    "error": null
+  },
+  {
+    "id": "574e1b13-e62c-4710-b8be-3f51c9a59e48",
+    "type": "click",
+    "selector": "getByLabel('采购任务列表')",
+    "frame_index": null,
+    "tab_id": null,
+    "value": null,
+    "timestamp": 1780313437.955,
+    "duration": 0.0,
+    "metadata": {
+      "tagName": "SPAN",
+      "inputType": "",
+      "button": 0,
+      "clientX": 90,
+      "clientY": 149,
+      "checked": false
+    },
+    "related_api_ids": [
+      "71b5f56f-1b44-45ec-b0ed-5b4f5dc73734",
+      "a6bba45d-8977-41e3-943b-62a861b63fec"
+    ],
+    "error": null
+  }
+]

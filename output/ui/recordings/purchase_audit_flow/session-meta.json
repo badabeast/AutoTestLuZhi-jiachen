@@ -1,0 +1,12 @@
+{
+  "version": "1.0",
+  "id": "de50f0bb",
+  "name": "purchase_audit_flow",
+  "start_time": "2026-05-28T18:39:11.528390",
+  "end_time": "2026-05-28T18:40:34.461409",
+  "url": "https://www.test.zcygov.cn/demand_front/#/review/demand/waitReview?_app_=zcy.demand",
+  "operation_count": 8,
+  "api_call_count": 3,
+  "error_count": 0,
+  "metadata": {}
+}

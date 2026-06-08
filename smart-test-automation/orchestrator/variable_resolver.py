@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Any
 
 
-class VariableResolver:
+class CrossModuleVariableBridge:
     """变量传递解析器"""
 
     def __init__(self):

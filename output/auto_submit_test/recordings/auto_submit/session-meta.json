@@ -1,0 +1,12 @@
+{
+  "version": "1.0",
+  "id": "6283a9ef-c57c-4455-ace1-98c07f648f0c",
+  "name": "auto_submit",
+  "start_time": "2026-06-01T20:51:35.347738",
+  "end_time": "2026-06-01T20:53:26.712439",
+  "url": "https://www.test.zcygov.cn/demand_front/#/review/demand/waitReview?_app_=zcy.demand",
+  "operation_count": 0,
+  "api_call_count": 16,
+  "error_count": 0,
+  "metadata": {}
+}

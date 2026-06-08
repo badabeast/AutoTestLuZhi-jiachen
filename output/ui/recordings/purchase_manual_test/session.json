@@ -1,0 +1,521 @@
+{
+  "id": "96bf2ba6-edbb-42d7-bbe3-2f9a7668a8ea",
+  "name": "purchase_manual_test",
+  "start_time": "2026-06-01T19:28:57.180297",
+  "end_time": "2026-06-01T19:38:57.143436",
+  "url": "https://www.test.zcygov.cn/demand_front/#/review/demand/waitReview?_app_=zcy.demand",
+  "operations": [
+    {
+      "id": "598eeb61-3452-491d-97b8-976478872728",
+      "type": "click",
+      "selector": "locator('div')",
+      "frame_index": null,
+      "tab_id": null,
+      "value": null,
+      "timestamp": 1780313371.139,
+      "duration": 0.0,
+      "metadata": {
+        "tagName": "DIV",
+        "inputType": "",
+        "button": 0,
+        "clientX": 147,
+        "clientY": 273,
+        "checked": false
+      },
+      "related_api_ids": [],
+      "error": null
+    },
+    {
+      "id": "82d04d30-15e6-4dab-b679-a53e38ab3a15",
+      "type": "click",
+      "selector": "getByLabel('创建采购任务')",
+      "frame_index": null,
+      "tab_id": null,
+      "value": null,
+      "timestamp": 1780313372.591,
+      "duration": 0.0,
+      "metadata": {
+        "tagName": "SPAN",
+        "inputType": "",
+        "button": 0,
+        "clientX": 110,
+        "clientY": 306,
+        "checked": false
+      },
+      "related_api_ids": [],
+      "error": null
+    },
+    {
+      "id": "91f3e3e5-3da3-4553-abc6-80c842a433f9",
+      "type": "click",
+      "selector": "getByRole('button', { name: '高级' })",
+      "frame_index": null,
+      "tab_id": null,
+      "value": null,
+      "timestamp": 1780313374.156,
+      "duration": 0.0,
+      "metadata": {
+        "tagName": "BUTTON",
+        "inputType": "submit",
+        "button": 0,
+        "clientX": 405,
+        "clientY": 419,
+        "checked": false
+      },
+      "related_api_ids": [],
+      "error": null
+    },
+    {
+      "id": "f1aeb1f7-6f15-419d-a786-9b5a05fcbb9b",
+      "type": "click",
+      "selector": "getByRole('link', { name: '继续前往test.zcygov.cn（不安全）' })",
+      "frame_index": null,
+      "tab_id": null,
+      "value": null,
+      "timestamp": 1780313374.955,
+      "duration": 0.0,
+      "metadata": {
+        "tagName": "A",
+        "inputType": "",
+        "button": 0,
+        "clientX": 423,
+        "clientY": 553,
+        "checked": false
+      },
+      "related_api_ids": [],
+      "error": null
+    },
+    {
+      "id": "4d9aa49f-a8a5-493b-9954-1fe8b591ebf7",
+      "type": "click",
+      "selector": "getByRole('link', { name: '创建采购任务' })",
+      "frame_index": null,
+      "tab_id": null,
+      "value": null,
+      "timestamp": 1780313389.057,
+      "duration": 0.0,
+      "metadata": {
+        "tagName": "A",
+        "inputType": "text",
+        "button": 0,
+        "clientX": 1235,
+        "clientY": 391,
+        "checked": false
+      },
+      "related_api_ids": [],
+      "error": null
+    },
+    {
+      "id": "9239ab97-07fd-449d-a3ba-f5c2e428c949",
+      "type": "click",
+      "selector": "getByRole('textbox', { name: '请输入' })",
+      "frame_index": null,
+      "tab_id": null,
+      "value": null,
+      "timestamp": 1780313390.754,
+      "duration": 0.0,
+      "metadata": {
+        "tagName": "INPUT",
+        "inputType": "text",
+        "button": 0,
+        "clientX": 505,
+        "clientY": 307,
+        "checked": false
+      },
+      "related_api_ids": [],
+      "error": null
+    },
+    {
+      "id": "b1291629-5cf4-41ad-93e6-7f10dd8e8469",
+      "type": "fill",
+      "selector": "getByRole('textbox', { name: '请输入' })",
+      "frame_index": null,
+      "tab_id": null,
+      "value": "wo",
+      "timestamp": 1780313393.736,
+      "duration": 0.0,
+      "metadata": {
+        "tagName": "INPUT",
+        "inputType": "text",
+        "checked": false
+      },
+      "related_api_ids": [],
+      "error": null
+    },
+    {
+      "id": "4704039b-e692-4064-bba0-7c8beae56558",
+      "type": "fill",
+      "selector": "getByRole('textbox', { name: '请输入' })",
+      "frame_index": null,
+      "tab_id": null,
+      "value": null,
+      "timestamp": 1780313394.489,
+      "duration": 0.0,
+      "metadata": {
+        "tagName": "INPUT",
+        "inputType": "text",
+        "checked": false
+      },
+      "related_api_ids": [],
+      "error": null
+    },
+    {
+      "id": "f882d86d-fe33-46e2-b2ad-c77ead466f28",
+      "type": "fill",
+      "selector": "getByRole('textbox', { name: '请输入' })",
+      "frame_index": null,
+      "tab_id": null,
+      "value": "zhe",
+      "timestamp": 1780313395.373,
+      "duration": 0.0,
+      "metadata": {
+        "tagName": "INPUT",
+        "inputType": "text",
+        "checked": false
+      },
+      "related_api_ids": [],
+      "error": null
+    },
+    {
+      "id": "a21a51eb-7545-4c9f-bd81-424c5456aa2f",
+      "type": "fill",
+      "selector": "getByRole('textbox', { name: '请输入' })",
+      "frame_index": null,
+      "tab_id": null,
+      "value": null,
+      "timestamp": 1780313397.046,
+      "duration": 0.0,
+      "metadata": {
+        "tagName": "INPUT",
+        "inputType": "text",
+        "checked": false
+      },
+      "related_api_ids": [],
+      "error": null
+    },
+    {
+      "id": "2ecaa84d-dfb8-4884-b55c-d60a5e3916ba",
+      "type": "fill",
+      "selector": "getByRole('textbox', { name: '请输入' })",
+      "frame_index": null,
+      "tab_id": null,
+      "value": "zh",
+      "timestamp": 1780313398.71,
+      "duration": 0.0,
+      "metadata": {
+        "tagName": "INPUT",
+        "inputType": "text",
+        "checked": false
+      },
+      "related_api_ids": [],
+      "error": null
+    },
+    {
+      "id": "d7598454-992f-41e5-8a90-5f55786a498d",
+      "type": "fill",
+      "selector": "getByRole('textbox', { name: '请输入' })",
+      "frame_index": null,
+      "tab_id": null,
+      "value": null,
+      "timestamp": 1780313399.342,
+      "duration": 0.0,
+      "metadata": {
+        "tagName": "INPUT",
+        "inputType": "text",
+        "checked": false
+      },
+      "related_api_ids": [],
+      "error": null
+    },
+    {
+      "id": "fde615f0-07f7-4e0e-9afd-38e9000da54a",
+      "type": "fill",
+      "selector": "getByRole('textbox', { name: '请输入' })",
+      "frame_index": null,
+      "tab_id": null,
+      "value": "liu",
+      "timestamp": 1780313400.276,
+      "duration": 0.0,
+      "metadata": {
+        "tagName": "INPUT",
+        "inputType": "text",
+        "checked": false
+      },
+      "related_api_ids": [],
+      "error": null
+    },
+    {
+      "id": "80a750b1-cba6-46a6-9bb5-e93097c9ede3",
+      "type": "fill",
+      "selector": "getByRole('textbox', { name: '请输入' })",
+      "frame_index": null,
+      "tab_id": null,
+      "value": "录制",
+      "timestamp": 1780313402.171,
+      "duration": 0.0,
+      "metadata": {
+        "tagName": "INPUT",
+        "inputType": "text",
+        "checked": false
+      },
+      "related_api_ids": [],
+      "error": null
+    },
+    {
+      "id": "c496ca78-daaa-43e4-930b-d53a0b09eda5",
+      "type": "fill",
+      "selector": "getByRole('textbox', { name: '请输入' })",
+      "frame_index": null,
+      "tab_id": null,
+      "value": "录制采购任务",
+      "timestamp": 1780313403.965,
+      "duration": 0.0,
+      "metadata": {
+        "tagName": "INPUT",
+        "inputType": "text",
+        "checked": false
+      },
+      "related_api_ids": [],
+      "error": null
+    },
+    {
+      "id": "9844b76f-2d59-4704-b0c5-2c23d7f37db8",
+      "type": "click",
+      "selector": "getByRole('button', { name: '确定' })",
+      "frame_index": null,
+      "tab_id": null,
+      "value": null,
+      "timestamp": 1780313405.493,
+      "duration": 0.0,
+      "metadata": {
+        "tagName": "BUTTON",
+        "inputType": "button",
+        "button": 0,
+        "clientX": 1113,
+        "clientY": 475,
+        "checked": false
+      },
+      "related_api_ids": [],
+      "error": null
+    },
+    {
+      "id": "63885174-8adb-4d59-a46d-8d522a658737",
+      "type": "click",
+      "selector": "getByRole('button', { name: '查看采购任务' })",
+      "frame_index": null,
+      "tab_id": null,
+      "value": null,
+      "timestamp": 1780313407.746,
+      "duration": 0.0,
+      "metadata": {
+        "tagName": "BUTTON",
+        "inputType": "button",
+        "button": 0,
+        "clientX": 728,
+        "clientY": 467,
+        "checked": false
+      },
+      "related_api_ids": [],
+      "error": null
+    },
+    {
+      "id": "100fa377-2100-49ce-96cb-8a1e8cd96e5e",
+      "type": "click",
+      "selector": "getByRole('button', { name: '返回' })",
+      "frame_index": null,
+      "tab_id": null,
+      "value": null,
+      "timestamp": 1780313411.741,
+      "duration": 0.0,
+      "metadata": {
+        "tagName": "BUTTON",
+        "inputType": "button",
+        "button": 0,
+        "clientX": 1223,
+        "clientY": 77,
+        "checked": false
+      },
+      "related_api_ids": [],
+      "error": null
+    },
+    {
+      "id": "d9539141-b44a-49db-b83f-bfeb218b940f",
+      "type": "click",
+      "selector": "getByRole('tab')",
+      "frame_index": null,
+      "tab_id": null,
+      "value": null,
+      "timestamp": 1780313413.654,
+      "duration": 0.0,
+      "metadata": {
+        "tagName": "DIV",
+        "inputType": "",
+        "button": 0,
+        "clientX": 261,
+        "clientY": 200,
+        "checked": false
+      },
+      "related_api_ids": [],
+      "error": null
+    },
+    {
+      "id": "574e1b13-e62c-4710-b8be-3f51c9a59e48",
+      "type": "click",
+      "selector": "getByLabel('采购任务列表')",
+      "frame_index": null,
+      "tab_id": null,
+      "value": null,
+      "timestamp": 1780313437.955,
+      "duration": 0.0,
+      "metadata": {
+        "tagName": "SPAN",
+        "inputType": "",
+        "button": 0,
+        "clientX": 90,
+        "clientY": 149,
+        "checked": false
+      },
+      "related_api_ids": [
+        "71b5f56f-1b44-45ec-b0ed-5b4f5dc73734",
+        "a6bba45d-8977-41e3-943b-62a861b63fec"
+      ],
+      "error": null
+    }
+  ],
+  "api_calls": [
+    {
+      "id": "8da78e76-7e20-4fa6-9ea6-eafcd33f3548",
+      "timestamp": 1780313340.037546,
+      "method": "GET",
+      "url": "https://www.test.zcygov.cn/api/workbench/my/themes?timestamp=1780313340",
+      "path": "/api/workbench/my/themes",
+      "request_headers": {
+        "sec-ch-ua-platform": "\"macOS\"",
+        "referer": "https://www.test.zcygov.cn/demand_front/",
+        "sec-ch-ua": "\"Chromium\";v=\"147\", \"Not.A/Brand\";v=\"8\"",
+        "x-nonce": "h2oqH4IwZSTkkHzb",
+        "x-timestamp": "1780313340030",
+        "sec-ch-ua-mobile": "?0",
+        "x-sign": "070407929ca415247a12bf38a72ba994",
+        "x-requested-with": "XMLHttpRequest",
+        "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36",
+        "accept": "application/json, text/plain, */*",
+        "x-sign-version": "v1"
+      },
+      "request_body": null,
+      "response_status": 200,
+      "response_body": {
+        "success": true,
+        "result": null,
+        "code": null,
+        "message": null
+      },
+      "response_headers": {
+        "transfer-encoding": "chunked",
+        "x-request-id": "4959650056630f22246fc398ec3eb693",
+        "content-encoding": "gzip",
+        "x-envoy-upstream-service-time": "3",
+        "resp-start-time": "1780313340121",
+        "x-auth-status": "200",
+        "connection": "keep-alive",
+        "req-cost-time": "5",
+        "date": "Mon, 01 Jun 2026 11:29:00 GMT",
+        "content-type": "application/json;charset=UTF-8",
+        "server": "openresty",
+        "req-arrive-time": "1780313340116"
+      },
+      "duration": 32.360076904296875,
+      "related_operation_id": null,
+      "operation_name": null,
+      "is_filtered": false,
+      "filter_reason": null,
+      "error": null
+    },
+    {
+      "id": "71b5f56f-1b44-45ec-b0ed-5b4f5dc73734",
+      "timestamp": 1780313936.879406,
+      "method": "GET",
+      "url": "https://www.test.zcygov.cn/api/workbench/my/info",
+      "path": "/api/workbench/my/info",
+      "request_headers": {
+        "sec-ch-ua-platform": "\"macOS\"",
+        "referer": "https://www.test.zcygov.cn/demand_front/",
+        "sec-ch-ua": "\"Chromium\";v=\"147\", \"Not.A/Brand\";v=\"8\"",
+        "x-nonce": "e8zeRDcqMxmp6f2T",
+        "x-timestamp": "1780313344948",
+        "sec-ch-ua-mobile": "?0",
+        "x-sign": "c62848ff1064cce2b7383d5c3cbb0a1d",
+        "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36",
+        "x-sign-version": "v1"
+      },
+      "request_body": null,
+      "response_status": 200,
+      "response_body": null,
+      "response_headers": {
+        "transfer-encoding": "chunked",
+        "x-request-id": "f16b32319137673cf365157f32c5e138",
+        "content-encoding": "gzip",
+        "x-envoy-upstream-service-time": "3",
+        "resp-start-time": "1780313345035",
+        "x-auth-status": "200",
+        "connection": "keep-alive",
+        "req-cost-time": "5",
+        "date": "Mon, 01 Jun 2026 11:29:05 GMT",
+        "content-type": "application/json;charset=UTF-8",
+        "server": "openresty",
+        "req-arrive-time": "1780313345030"
+      },
+      "duration": 1.3048648834228516,
+      "related_operation_id": "574e1b13-e62c-4710-b8be-3f51c9a59e48",
+      "operation_name": null,
+      "is_filtered": false,
+      "filter_reason": null,
+      "error": null
+    },
+    {
+      "id": "a6bba45d-8977-41e3-943b-62a861b63fec",
+      "timestamp": 1780313936.89549,
+      "method": "GET",
+      "url": "https://login.test.zcygov.cn/api/workbench/my/themes?timestamp=1780313345",
+      "path": "/api/workbench/my/themes",
+      "request_headers": {
+        "sec-ch-ua-platform": "\"macOS\"",
+        "referer": "https://login.test.zcygov.cn/user-login/",
+        "sec-ch-ua": "\"Chromium\";v=\"147\", \"Not.A/Brand\";v=\"8\"",
+        "x-nonce": "yzpZi3EyyODzTqXt",
+        "x-timestamp": "1780313345649",
+        "sec-ch-ua-mobile": "?0",
+        "x-sign": "67a835da4d3a45ac2778768300185744",
+        "x-requested-with": "XMLHttpRequest",
+        "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36",
+        "accept": "application/json, text/plain, */*",
+        "x-sign-version": "v1"
+      },
+      "request_body": null,
+      "response_status": 200,
+      "response_body": null,
+      "response_headers": {
+        "transfer-encoding": "chunked",
+        "x-request-id": "7a9dafb5b74c362947f15778014f6c98",
+        "content-encoding": "gzip",
+        "x-envoy-upstream-service-time": "3",
+        "resp-start-time": "1780313345742",
+        "x-auth-status": "200",
+        "connection": "keep-alive",
+        "req-cost-time": "5",
+        "date": "Mon, 01 Jun 2026 11:29:05 GMT",
+        "content-type": "application/json;charset=UTF-8",
+        "server": "openresty",
+        "req-arrive-time": "1780313345737"
+      },
+      "duration": 0.41604042053222656,
+      "related_operation_id": "574e1b13-e62c-4710-b8be-3f51c9a59e48",
+      "operation_name": null,
+      "is_filtered": false,
+      "filter_reason": null,
+      "error": null
+    }
+  ],
+  "errors": [],
+  "metadata": {}
+}

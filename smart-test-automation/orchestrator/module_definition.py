@@ -29,7 +29,7 @@ class ModuleDefinition:
     """模块定义
 
     对应 knowledge/modules/<module_name>.json 的数据模型。
-    由 RecordingWrapper 在录制完成后自动生成。
+    由 TwoStepRecorder 在录制完成后自动生成。
     """
     id: str                                    # 模块ID（如 create_demand）
     name: str = ""                             # 显示名称（如 "创建采购需求"）

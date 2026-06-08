@@ -16,7 +16,7 @@ from typing import List, Dict, Any, Optional
 from .provider import OpenAICompatibleProvider, create_ai_provider, MODEL_REGISTRY
 
 
-class AIDependencyAnalyzer:
+class SmartDependencyInferencer:
     """AI 依赖分析器
 
     分析 API 请求序列中的数据依赖关系，例如:
@@ -28,7 +28,7 @@ class AIDependencyAnalyzer:
 
     用法::
 
-        analyzer = AIDependencyAnalyzer()  # 默认 GLM-5.1
+        analyzer = SmartDependencyInferencer()  # 默认 GLM-5.1
         deps = analyzer.analyze_dependencies(recordings)
     """
 
@@ -67,8 +67,8 @@ class AIDependencyAnalyzer:
         """获取前端知识上下文（延迟加载）"""
         if self._frontend_context is None:
             try:
-                from knowledge.frontend_loader import FrontendKnowledgeLoader
-                loader = FrontendKnowledgeLoader()
+                from knowledge.frontend_loader import FrontendKnowledgeBase
+                loader = FrontendKnowledgeBase()
                 self._frontend_context = loader.build_ai_context(max_chars=6000)
                 if self._frontend_context:
                     print(f"   📚 已加载前端知识文档作为分析上下文")
@@ -93,10 +93,10 @@ class AIDependencyAnalyzer:
         for req in recordings:
             prompt += f"S{req['sequence']}: {req['method']} {req['path']}\n"
             if req.get("request_body"):
-                body_str = json.dumps(req["request_body"], ensure_ascii=False)[:200]
+                body_str = json.dumps(req["request_body"], ensure_ascii=False)[:500]
                 prompt += f"  请求: {body_str}\n"
             if req.get("response_body"):
-                resp_str = json.dumps(req["response_body"], ensure_ascii=False)[:200]
+                resp_str = json.dumps(req["response_body"], ensure_ascii=False)[:500]
                 prompt += f"  响应: {resp_str}\n"
             prompt += "\n"
 
