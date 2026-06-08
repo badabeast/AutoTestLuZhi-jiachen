@@ -1,0 +1,24 @@
+{
+  "models": {
+    "glm-5.1": {
+      "name": "zcy AI 平台 / GLM-5.1",
+      "vendor": "zcy_ai",
+      "url": "https://ai-platform.cai-inc.com/api/biz-ai/ai-model/api/11/apps/anthropic/v1/messages",
+      "env_key": "ANTHROPIC_AUTH_TOKEN",
+      "supports_tool_call": true,
+      "supports_reasoning": true
+    },
+    "ollama": {
+      "name": "Ollama Qwen2.5:7b（本地备用）",
+      "vendor": "ollama",
+      "url": "http://localhost:11434/api",
+      "env_key": null,
+      "supports_tool_call": false,
+      "supports_reasoning": false
+    }
+  },
+  "vendor_urls": {
+    "zcy_ai": "https://ai-platform.cai-inc.com/api/biz-ai/ai-model/api/11/apps/anthropic/v1/messages"
+  },
+  "default_model": "glm-5.1"
+}

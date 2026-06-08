@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+login_state/
+output/
+knowledge/
+playwright-healer-reports/
+*.har
+*.zip
