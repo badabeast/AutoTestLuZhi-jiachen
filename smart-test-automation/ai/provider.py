@@ -1,13 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-AI Provider - 抽象层，支持多种 AI 服务
-
-默认: 百炼 DeepSeek-V4-Pro
-兼容: MiniMax、智谱、百炼(Qwen/DeepSeek)、OpenAI、Ollama
-
-模型配置从 ai/models_config.json 加载，API URL 和 Key 通过环境变量注入，
-不在代码中硬编码任何敏感信息。
+多模型 AI 服务适配层，统一封装不同大模型供应商的接口调用。
+通过 OpenAI 兼容协议对接 DeepSeek、Qwen、Ollama 等后端，
+模型注册信息和连接参数分别从配置文件和环境变量获取，
+不在代码中硬编码敏感信息。
 """
 
 import os
@@ -18,9 +15,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 
-# ---------------------------------------------------------------------------
-# 轻量数据模型（替代已抛弃的 models/data_models.py）
-# ---------------------------------------------------------------------------
+# 轻量数据模型
 
 from dataclasses import dataclass, field as dc_field
 
@@ -78,9 +73,7 @@ class OptimizedScript:
     code: str = ""
     module_name: str = ""
 
-# ---------------------------------------------------------------------------
-# 模型注册表 — 从配置文件加载（敏感URL不在代码中硬编码）
-# ---------------------------------------------------------------------------
+# 模型注册表 — 从配置文件加载
 
 _CONFIG_PATH = Path(__file__).parent / "models_config.json"
 
@@ -258,9 +251,9 @@ class OpenAICompatibleProvider(AIProvider):
     # ------------------------------------------------------------------
 
     def _call_api(self, prompt: str, temperature: float = 0.3) -> str:
-        """调用 Anthropic Messages API（zcy AI 平台）
+        """调用 Anthropic Messages API
 
-        zcy AI 平台使用 Anthropic 协议：
+        Anthropic 协议：
           POST /v1/messages
           Header: x-api-key + anthropic-version
           Body: { model, messages, max_tokens }

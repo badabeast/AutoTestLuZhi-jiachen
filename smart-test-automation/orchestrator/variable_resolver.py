@@ -104,16 +104,16 @@ class CrossModuleVariableBridge:
             os.environ["TEST_CONTEXT_VARS"] = self.to_env_json()
 
     @classmethod
-    def from_env(cls) -> "VariableResolver":
+    def from_env(cls) -> "CrossModuleVariableBridge":
         """从环境变量恢复上下文"""
-        resolver = cls()
+        bridge = cls()
         env_vars = os.environ.get("TEST_CONTEXT_VARS", "")
         if env_vars:
             try:
-                resolver.context_vars = json.loads(env_vars)
+                bridge.context_vars = json.loads(env_vars)
             except json.JSONDecodeError:
                 pass
-        return resolver
+        return bridge
 
     def save(self, path: str):
         """保存变量上下文到文件"""

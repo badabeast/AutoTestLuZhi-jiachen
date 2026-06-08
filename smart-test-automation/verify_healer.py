@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-healer + zcy AI 平台 连通性验证脚本
+healer + AI 平台 连通性验证脚本
 
 独立运行，不依赖 pytest，直接验证:
   1. HealingPage 能正常创建
-  2. zcy AI 平台（Anthropic 协议）API 能响应 healer 的自愈请求
+  2. AI 平台（Anthropic 协议）API 能响应 healer 的自愈请求
   3. healer 4 级策略链完整可用
 
 运行方式:
@@ -41,17 +41,17 @@ async def verify_healer_config():
     return config
 
 
-async def verify_zcy_api(config):
-    """直接验证 zcy AI 平台（Anthropic 协议）API 是否能响应"""
+async def verify_ai_api(config):
+    """直接验证 AI 平台（Anthropic 协议）API 是否能响应"""
     import httpx
 
     provider = config.providers[0]
 
-    print("\n🔄 验证 zcy AI 平台 API 连通性...")
+    print("\n🔄 验证 AI 平台 API 连通性...")
     print(f"   URL: {provider.api_url}")
     print(f"   Model: {provider.model}")
 
-    # zcy 平台使用 Authorization: Bearer 认证（非 Anthropic 标准的 x-api-key）
+    # 使用 Authorization: Bearer 认证
     headers = {
         "Authorization": f"Bearer {provider.api_key}",
         "anthropic-version": "2023-06-01",
@@ -72,20 +72,19 @@ async def verify_zcy_api(config):
 
         if resp.status_code == 200:
             body = resp.json()
-            # Anthropic 格式: content[0].text
             text = body.get("content", [{}])[0].get("text", "")
-            print(f"✅ zcy AI 平台 API 连通成功!")
+            print(f"✅ AI 平台 API 连通成功!")
             print(f"   响应: {text}")
             print(f"   状态码: {resp.status_code}")
             print(f"   Token 使用: {body.get('usage', {})}")
             return True
         else:
-            print(f"❌ zcy AI 平台 API 返回错误: {resp.status_code}")
+            print(f"❌ AI 平台 API 返回错误: {resp.status_code}")
             print(f"   响应: {resp.text[:500]}")
             return False
 
     except Exception as e:
-        print(f"❌ zcy AI 平台 API 连接失败: {e}")
+        print(f"❌ AI 平台 API 连接失败: {e}")
         return False
 
 
@@ -120,14 +119,14 @@ async def verify_healing_page(config):
 async def main():
     """主验证流程"""
     print("=" * 50)
-    print("  healer + zcy AI 平台 连通性验证")
+    print("  healer + AI 平台 连通性验证")
     print("=" * 50)
 
     # Step 1: 配置验证
     config = await verify_healer_config()
 
-    # Step 2: zcy API 连通性
-    api_ok = await verify_zcy_api(config)
+    # Step 2: AI API 连通性
+    api_ok = await verify_ai_api(config)
 
     # Step 3: HealingPage 验证
     if api_ok:
@@ -141,15 +140,15 @@ async def main():
     print("  验证结果汇总")
     print("=" * 50)
     print(f"  配置加载: ✅")
-    print(f"  zcy API: {'✅' if api_ok else '❌'}")
+    print(f"  AI API: {'✅' if api_ok else '❌'}")
     print(f"  HealingPage: {'✅' if page_ok else '⚠️'}")
 
     if api_ok:
-        print("\n✅ healer + zcy AI 平台 连通性验证通过!")
+        print("\n✅ healer + AI 平台 连通性验证通过!")
         print("   Phase 1 healer 集成已完成，可进入真实录制验证阶段")
         return True
     else:
-        print("\n❌ healer + zcy AI 平台 连通性验证失败!")
+        print("\n❌ healer + AI 平台 连通性验证失败!")
         print("   请检查 .env 中的 ANTHROPIC_AUTH_TOKEN 配置")
         return False
 

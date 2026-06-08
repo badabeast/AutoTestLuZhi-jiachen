@@ -26,7 +26,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from playwright.sync_api import sync_playwright
 
 STORAGE_STATE_PATH = Path("login_state/storage_state.json")
-TARGET_URL = "https://www.test.zcygov.cn/demand_front/#/overview?_app_=zcy.demand&app=demand&pageSize=20"
+TARGET_URL = os.environ.get("WEB_DEMAND_LOGIN_PAGE_URL", "https://www.example.test.com/demand_front/#/overview")
 
 
 def refresh_login_state(manual: bool = False):

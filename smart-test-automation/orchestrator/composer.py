@@ -7,7 +7,7 @@
 
 用法::
 
-    graph = DependencyGraph.load()
+    graph = TestChainGraph()
     composer = ExecutionPlanComposer()
     plan = composer.compose("confirm_demand", graph)
     # plan.chain = ["create_demand", "audit_demand", "confirm_demand"]
@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 
-from .graph import DependencyGraph
+from .graph import TestChainGraph
 from .module_definition import ModuleDefinition
 
 
@@ -57,13 +57,13 @@ class ExecutionPlan:
         }
 
 
-class ExecutionPlanExecutionPlanComposer:
+class ExecutionPlanComposer:
     """执行计划编排器"""
 
     def compose(
         self,
         target_module: str,
-        graph: DependencyGraph,
+        graph: TestChainGraph,
         external_params: Optional[Dict[str, Any]] = None,
     ) -> ExecutionPlan:
         """根据依赖图编排执行计划

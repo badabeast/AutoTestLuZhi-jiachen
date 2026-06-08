@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-RecordingASTParser — 用 AST 解析 Playwright codegen 生成的 Python 脚本
+AST 解析器，从 Playwright codegen 输出中提取结构化操作序列。
 
-从 codegen 输出的 Python-pytest 脚本中提取 UI 操作序列：
-  page.get_by_role('button', name='提交').click()
-  → UIOperation(action="click", selector_type="role", selector_value="button", name="提交")
+将 codegen 生成的 Python-pytest 脚本解析为 UIOperation 列表，
+例如 page.get_by_role('button', name='提交').click()
+会被提取为 action="click", selector_type="role", selector_value="button"。
 
-解析策略：AST 分析而非正则，更准确可靠
+解析基于 Python ast 模块，比正则匹配更准确可靠。
 """
 
 import ast
@@ -62,23 +62,15 @@ VALUE_ACTIONS = {"fill", "type", "press", "select_option", "set_input_files", "g
 
 
 class RecordingASTParser:
-    """用 AST 解析 Playwright codegen 生成的 Python-pytest 脚本
-
-    用法::
-        parser = RecordingASTParser()
-        ops = parser.parse("output/modules/create_demand/raw_script.py")
-        for op in ops:
-            print(f"Step {op.step_index}: {op.action} {op.selector_type}={op.selector_value}")
-    """
+    """用 AST 解析 Playwright codegen 生成的 Python-pytest 脚本。"""
 
     def parse(self, script_path: str) -> List[UIOperation]:
-        """解析 codegen 生成的 Python 脚本
+        """解析 codegen 生成的 Python 脚本。
 
-        Args:
-            script_path: codegen 生成的脚本文件路径
-
-        Returns:
-            List[UIOperation]: 提取的 UI 操作序列
+        :param script_path: codegen 生成的脚本文件路径
+        :type script_path: str
+        :return: 提取的 UI 操作序列
+        :rtype: List[UIOperation]
         """
         with open(script_path, 'r', encoding='utf-8') as f:
             source = f.read()

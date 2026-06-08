@@ -49,6 +49,9 @@ def main():
     print("  智能测试执行系统 v5 — 端到端 Demo")
     print("=" * 60)
 
+    # Demo 中使用的示例基础 URL（从环境变量读取，避免硬编码内部地址）
+    DEMO_URL = os.environ.get("DEMO_BASE_URL", "https://demo.example.com")
+
     # ============================================================
     # Step 1: 录制解析 — 模拟 codegen 输出 + HAR 解析
     # ============================================================
@@ -63,7 +66,7 @@ def main():
 from playwright.sync_api import Page, expect
 
 def test_create_demand(page: Page):
-    page.goto("https://www.test.zcygov.cn/demand_front/")
+    page.goto(f"{DEMO_URL}/demand_front/")
     page.get_by_role("link", name="采购需求管理").click()
     page.get_by_role("button", name="新建需求").click()
     page.get_by_label("需求名称").fill("测试需求_自动化")
@@ -89,7 +92,7 @@ def test_create_demand(page: Page):
                 {
                     "request": {
                         "method": "POST",
-                        "url": "https://www.test.zcygov.cn/api/demand/create",
+                        "url": f"{DEMO_URL}/api/demand/create",
                         "headers": [],
                         "postData": {
                             "mimeType": "application/json",
@@ -109,7 +112,7 @@ def test_create_demand(page: Page):
                 {
                     "request": {
                         "method": "GET",
-                        "url": "https://www.test.zcygov.cn/api/demand/list",
+                        "url": f"{DEMO_URL}/api/demand/list",
                         "headers": [],
                     },
                     "response": {
@@ -172,7 +175,7 @@ def test_create_demand(page: Page):
 
     module_def = {
         "module_name": "create_demand_demo",
-        "target_url": "https://www.test.zcygov.cn/demand_front/",
+        "target_url": f"{DEMO_URL}/demand_front/",
         "raw_script": str(raw_script),
         "api_har": str(demo_har),
         "enhanced_script": str(enhanced_script),
@@ -210,7 +213,7 @@ def test_create_demand(page: Page):
     # 注册第二个模拟模块（审核需求）
     audit_def = {
         "module_name": "audit_demand_demo",
-        "target_url": "https://www.test.zcygov.cn/demand_front/",
+        "target_url": f"{DEMO_URL}/demand_front/",
         "smart_analysis": {
             "extract_vars": [
                 {"name": "audit_result", "from_api": "POST /demand/audit", "from_field": "data.result"}
@@ -226,7 +229,7 @@ def test_create_demand(page: Page):
     # 注册第三个模拟模块（确认需求）
     confirm_def = {
         "module_name": "confirm_demand_demo",
-        "target_url": "https://www.test.zcygov.cn/demand_front/",
+        "target_url": f"{DEMO_URL}/demand_front/",
         "smart_analysis": {
             "extract_vars": [],
             "input_params": [
@@ -343,7 +346,7 @@ def test_create_demand(page: Page):
 
     # 构造上下文（模拟 page 和 api_calls）
     class MockPage:
-        url = "https://www.test.zcygov.cn/demand_front/#/detail"
+        url = f"{DEMO_URL}/demand_front/#/detail"
 
         class MockLocator:
             def is_visible(self): return True

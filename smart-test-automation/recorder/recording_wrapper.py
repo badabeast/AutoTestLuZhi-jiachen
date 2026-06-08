@@ -1,23 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-TwoStepRecorder — 两步录制编排器
+两步录制的主流程编排
 
-Step 1: 启动 Playwright codegen → 用户手动操作 → 保存 raw_script.py
-Step 2: 回放 raw_script + HAR + Trace → 无人值守 → 保存 api.har + trace.zip
-Step 3: 解析产物（codegen AST + HAR JSON）
-Step 4: AI 分析（依赖推断 + 变量提取）
-Step 5: 生成增强脚本（healer 兼容）
-Step 6: 保存模块定义到 knowledge/
-
-用法::
-    wrapper = TwoStepRecorder()
-    result = wrapper.record("create_demand", "https://www.test.zcygov.cn/demand_front/")
+codegen 录制 → 回放拿 HAR/Trace → 解析 → AI 分析 → 生成增强脚本 → 存 knowledge
 """
 
 import subprocess
 import sys
 import json
+import logging
 import os
 import re
 import shutil
@@ -26,27 +18,29 @@ from pathlib import Path
 from string import Template
 from typing import Optional, Dict, List, Any
 
+logger = logging.getLogger(__name__)
+
 from .codegen_parser import RecordingASTParser
 from .har_parser import HARParser
 from .script_transformer import HealingScriptTransformer
 
 
 class TwoStepRecorder:
-    """两步录制编排器"""
+    """录制 + 回放 + 解析"""
 
     def __init__(
         self,
         output_base: str = "output/modules",
         storage_state: str = "login_state/storage_state.json",
-        viewport: str = "1366,768",
-        har_url_filter: str = "**/api/**",
+        viewport: str = "1366,768", #设置Chrome大小
+        har_url_filter: str = "",
     ):
         self.output_base = Path(output_base)
         self.storage_state = storage_state
         self.viewport = viewport
         self.har_url_filter = har_url_filter
         self.codegen_parser = RecordingASTParser()
-        self.har_parser = HARParser(url_filter=har_url_filter)
+        self.har_parser = HARParser()
         self.script_transformer = HealingScriptTransformer()
 
     def record(
@@ -57,24 +51,13 @@ class TwoStepRecorder:
         har_url_filter: Optional[str] = None,
         headless_step2: bool = False,
     ) -> Optional[Dict]:
-        """执行完整录制流程（Step 1-6）
-
-        Args:
-            module_name: 模块名称（如 "create_demand"）
-            target_url: 目标页面 URL
-            storage_state: 登录态文件路径（覆盖默认值）
-            har_url_filter: HAR URL 过滤模式
-            headless_step2: Step 2 是否无头模式
-
-        Returns:
-            dict: 录制产物路径
-        """
+        # 参数兜底
         if storage_state is None:
             storage_state = self.storage_state
         if har_url_filter is None:
             har_url_filter = self.har_url_filter
 
-        # ===== 前置检查：登录态文件 =====
+        # 登录态得先准备好
         if not Path(storage_state).exists():
             print(f"❌ 登录态文件不存在: {storage_state}")
             print(f"   请先运行: python3 save_login_state.py")
@@ -83,7 +66,7 @@ class TwoStepRecorder:
         output_dir = self.output_base / module_name
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        # ===== Step 1: codegen 录制 =====
+        # Step 1: codegen 录制
         raw_script = output_dir / "raw_script.py"
         print(f"\n🎬 Step 1: 启动 codegen 录制 [{module_name}]")
         print(f"   URL: {target_url}")
@@ -91,8 +74,7 @@ class TwoStepRecorder:
         print(f"   请在浏览器中完成 [{module_name}] 的全部操作")
         print(f"   操作完成后关闭浏览器即可\n")
 
-        # 注意：不加 --test-id-attribute，让 codegen 使用默认的 role→text→css 优先级
-        # 这与方案文档"零前端配合"原则一致
+        # 启动命令
         cmd = [
             sys.executable, "-m", "playwright", "codegen",
             "--target=python-pytest",
@@ -103,13 +85,12 @@ class TwoStepRecorder:
             target_url,
         ]
 
-        result = subprocess.run(cmd, timeout=600)  # 10分钟超时，防止用户忘记关闭浏览器
+        result = subprocess.run(cmd, timeout=600)  # 10min，防呆
 
         if not raw_script.exists():
             print("❌ codegen 未生成脚本，退出")
             return None
 
-        # 检查生成的脚本是否为空或只有 import
         raw_content = raw_script.read_text(encoding='utf-8').strip()
         if not raw_content or len(raw_content) < 50:
             print("❌ codegen 生成的脚本内容过少，可能未录制任何操作")
@@ -123,13 +104,12 @@ class TwoStepRecorder:
         shutil.copy2(raw_script, versioned_script)
         print(f"   版本副本: {versioned_script}")
 
-        # ===== Step 2: 回放 + HAR + Trace =====
+        # Step 2: 回放，顺便录 HAR 和 Trace
         api_har = output_dir / "api.har"
         trace_file = output_dir / "trace.zip"
 
         print(f"\n🔄 Step 2: 自动回放 + HAR + Trace 录制...")
 
-        # 预处理 raw_script（时间戳+等待+跳过登录）
         preprocessed = self._preprocess_raw_script(str(raw_script), output_dir)
 
         wrapper_script = self._generate_wrapper_script(
@@ -144,7 +124,6 @@ class TwoStepRecorder:
         wrapper_path = output_dir / "_wrapper_recording.py"
         wrapper_path.write_text(wrapper_script, encoding='utf-8')
 
-        # 执行 wrapper
         pytest_cmd = [
             sys.executable, "-m", "pytest",
             str(wrapper_path),
@@ -155,16 +134,17 @@ class TwoStepRecorder:
             pytest_cmd,
             capture_output=True,
             text=True,
-            timeout=300,  # 5 分钟，业务操作可能需要较长时间
+            timeout=300,
         )
 
         har_exists = api_har.exists()
         trace_exists = trace_file.exists()
 
-        # 输出回放结果摘要
+        logger.info("Step 2 回放完成: returncode=%d, har=%s, trace=%s",
+                     step2_result.returncode, har_exists, trace_exists)
+
         if step2_result.returncode != 0:
             print(f"⚠️ 回放未完全成功 (exit code: {step2_result.returncode})")
-            # 输出关键错误信息
             stderr_lines = (step2_result.stderr or "").split('\n')
             for line in stderr_lines[-15:]:
                 if line.strip():
@@ -174,7 +154,6 @@ class TwoStepRecorder:
 
         if har_exists:
             print(f"✅ Step 2 完成: {api_har}")
-            # 保存带时间戳的副本
             ts = datetime.now().strftime("%Y%m%d_%H%M%S")
             versioned_har = output_dir / f"api_{ts}.har"
             shutil.copy2(api_har, versioned_har)
@@ -188,7 +167,7 @@ class TwoStepRecorder:
             if step2_result.returncode != 0:
                 print(f"   pytest stderr: {step2_result.stderr[:500]}")
 
-        # ===== Step 3: 解析产物 =====
+        # Step 3: 解析产物
         operations = []
         api_calls = []
 
@@ -201,19 +180,17 @@ class TwoStepRecorder:
 
         if har_exists:
             try:
-                # parse() 用 url_filter 过滤出 API 请求
-                # parse_api_sequence() 在此基础上再过滤静态资源
-                # 两步过滤互补：先筛选 API，再去掉静态资源，保留业务 API
+                #去掉静态资源，保留业务 API
                 api_calls = self.har_parser.parse_api_sequence(str(api_har))
                 all_calls_count = len(self.har_parser.parse(str(api_har)))
                 print(f"   全部请求: {all_calls_count}, 业务API: {len(api_calls)}")
             except Exception as e:
                 print(f"   ⚠️ HAR 解析失败: {e}")
 
-        # ===== Step 4: AI 分析（依赖推断 + 变量提取）=====
+        # Step 4: AI 分析
         ai_analysis = self._smart_analyze(module_name, operations, api_calls)
 
-        # ===== Step 5: 生成增强脚本 =====
+        # Step 5: 生成增强脚本 + PO 分层
         enhanced_script = output_dir / "enhanced_script.py"
         try:
             self.script_transformer.transform(
@@ -222,13 +199,12 @@ class TwoStepRecorder:
                 module_name=module_name,
                 extract_vars=ai_analysis.get("extract_vars", []),
             )
-            # 保存带时间戳的副本
             ts5 = datetime.now().strftime("%Y%m%d_%H%M%S")
             versioned_enhanced = output_dir / f"enhanced_script_{ts5}.py"
             shutil.copy2(enhanced_script, versioned_enhanced)
             print(f"   版本副本: {versioned_enhanced}")
 
-            # Step 5b: PO 分层生成（BasePage + 业务Page + pytest用例）
+            # PO 分层：BasePage + 业务Page + test用例
             po_dir = output_dir / "po"
             try:
                 po_result = self.script_transformer.generate_po_layers(
@@ -244,7 +220,7 @@ class TwoStepRecorder:
             enhanced_script = None
             po_result = {}
 
-        # ===== Step 6: 保存模块定义到 knowledge/ =====
+        # Step 6: 打包模块定义，存到 knowledge
         module_def = {
             "module_name": module_name,
             "target_url": target_url,
@@ -280,14 +256,12 @@ class TwoStepRecorder:
             "smart_analysis": ai_analysis,
         }
 
-        # 保存到 output 目录的摘要
         summary_path = output_dir / "recording_summary.json"
         summary_path.write_text(
             json.dumps(module_def, ensure_ascii=False, indent=2, default=str),
             encoding='utf-8',
         )
 
-        # 保存到 knowledge/modules/ 供编排引擎使用
         try:
             from knowledge import save_module_definition
             knowledge_path = save_module_definition(module_name, module_def)
@@ -303,15 +277,7 @@ class TwoStepRecorder:
         return module_def
 
     def replay(self, module_name: str, headless: bool = False) -> Optional[Dict]:
-        """重放已有的 raw_script.py，重新生成 HAR + Trace（跳过 codegen）
-
-        Args:
-            module_name: 模块名称
-            headless: 是否无头模式
-
-        Returns:
-            dict with har_path, trace_path, api_count
-        """
+        """重放已有 raw_script，重新抓 HAR 和 Trace（跳过 codegen）"""
         output_dir = Path(f"output/modules/{module_name}")
         raw_script = output_dir / "raw_script.py"
         if not raw_script.exists():
@@ -321,7 +287,6 @@ class TwoStepRecorder:
         api_har = output_dir / "api.har"
         trace_file = output_dir / "trace.zip"
 
-        # 清理旧产物
         for f in [api_har, trace_file]:
             if f.exists():
                 f.unlink()
@@ -332,7 +297,6 @@ class TwoStepRecorder:
         # 预处理 raw_script（时间戳+等待+跳过登录），生成 _preprocessed.py
         preprocessed = self._preprocess_raw_script(str(raw_script), output_dir)
 
-        # 生成并保存 wrapper 脚本（使用预处理后的脚本）
         wrapper_content = self._generate_wrapper_script(
             raw_script_path=str(preprocessed),
             har_path=str(api_har),
@@ -345,7 +309,6 @@ class TwoStepRecorder:
         wrapper_path.write_text(wrapper_content, encoding='utf-8')
         print(f"   wrapper: {wrapper_path}")
 
-        # 执行 wrapper
         pytest_cmd = [
             sys.executable, "-m", "pytest",
             str(wrapper_path),
@@ -373,7 +336,7 @@ class TwoStepRecorder:
         # 检查 HAR 结果
         har_exists = api_har.exists()
         trace_exists = trace_file.exists()
-        business = []  # 初始化，避免 har_exists=False 时引用未定义变量
+        business = []
 
         if har_exists:
             from recorder.har_parser import HARParser
@@ -386,7 +349,6 @@ class TwoStepRecorder:
             for c in business:
                 print(f"     {c.method:6s} {c.path}")
 
-            # 保存带时间戳的副本
             ts = datetime.now().strftime("%Y%m%d_%H%M%S")
             shutil.copy2(api_har, output_dir / f"api_{ts}.har")
             if trace_exists:
@@ -401,10 +363,7 @@ class TwoStepRecorder:
         }
 
     def _preprocess_raw_script(self, raw_script_path: str, output_dir: Path) -> Path:
-        """预处理 raw_script：时间戳注入、goto 守卫、提取登录操作
-
-        生成 _preprocessed.py，避免在 Template 中嵌入复杂的正则逻辑。
-        """
+        """预处理 raw_script：给 fill 加时间戳、goto 后加守卫、提取登录操作"""
         import time as _time
         source = Path(raw_script_path).read_text(encoding="utf-8")
 
@@ -418,8 +377,7 @@ class TwoStepRecorder:
                 for line in between.split('\n'):
                     stripped = line.strip()
                     if stripped and any(kw in stripped for kw in ['.fill(', '.click(', '.press(', '.check(']):
-                        login_actions.append(stripped)  # 无缩进，exec 可直接执行
-                # 清理掉登录操作（保留 goto 和 wait）
+                        login_actions.append(stripped)
                 lines = between.split('\n')
                 cleaned = []
                 for line in lines:
@@ -436,24 +394,22 @@ class TwoStepRecorder:
                 if login_actions:
                     print(f"   📋 已提取 {len(login_actions)} 个登录操作（SSO 失败时自动使用）")
 
-        # 保存提取的登录操作到全局 login_state/ 目录（所有模块复用）
-        # 只有提取到新操作时才覆盖
+        # 登录操作存到全局目录
         global_login_actions = Path("login_state/login_actions.py")
         if login_actions:
             global_login_actions.parent.mkdir(parents=True, exist_ok=True)
             global_login_actions.write_text('\n'.join(login_actions), encoding='utf-8')
             print(f"   📋 登录操作已保存到全局: {global_login_actions}")
         elif not global_login_actions.exists():
-            # 没有提取到登录操作，也没有全局文件，创建空文件
             global_login_actions.parent.mkdir(parents=True, exist_ok=True)
             global_login_actions.write_text('', encoding='utf-8')
 
-        # 2. 给 fill 值加时间戳后缀（在提取登录操作之后，不影响登录）
+        # 给 fill 的值拼上时间戳，保证每次回放数据不重复
         _ts = _time.strftime("%Y%m%d%H%M%S")
         def _add_ts(match):
             quote = match.group(1)
             value = match.group(2)
-            if not value or value in ("Zfcg@123456",) or value.replace(".", "").isdigit():
+            if not value or value.replace(".", "").isdigit():
                 return match.group(0)
             if value.startswith("http") or value.startswith("/"):
                 return match.group(0)
@@ -462,7 +418,7 @@ class TwoStepRecorder:
             return f'.fill({quote}{value}_{_ts}{quote})'
         source = re.sub(r"""\.fill\((["'])([^"']*?)\1\)""", _add_ts, source)
 
-        # 3. 在每个 page.goto() 后注入登录守卫 + 等待
+        # goto 后面插一段等待+登录检查
         def _add_guarded_wait(match):
             goto_line = match.group(1)
             return (goto_line + '\n'
@@ -470,7 +426,6 @@ class TwoStepRecorder:
                     '    ensure_logged_in(page, page.url)')
         source = re.sub(r'(\.goto\([^)]+\))', _add_guarded_wait, source)
 
-        # 保存预处理后的脚本
         preprocessed = output_dir / "_preprocessed.py"
         preprocessed.write_text(source, encoding='utf-8')
         return preprocessed
@@ -481,11 +436,7 @@ class TwoStepRecorder:
         operations: list,
         api_calls: list,
     ) -> Dict[str, Any]:
-        """Step 4: AI 分析（依赖推断 + 变量提取）
-
-        分析 API 响应中的可提取变量，以及与已录制模块的依赖关系。
-        优先使用 SmartDependencyInferencer（AI + 前端知识增强），失败回退规则匹配。
-        """
+        """AI 分析：从响应里提取变量、推断模块间依赖"""
         analysis: Dict[str, Any] = {
             "extract_vars": [],
             "dependencies": [],
@@ -494,7 +445,7 @@ class TwoStepRecorder:
         if not api_calls:
             return analysis
 
-        # ===== 4a. 规则提取：从 API 响应推断可提取变量（快速、确定性高）=====
+        # 从响应里找 ID 类字段，这些通常是可提取的变量
         for call in api_calls:
             resp = call.response_body
             if not isinstance(resp, dict):
@@ -509,55 +460,39 @@ class TwoStepRecorder:
                     "example_value": str(value)[:100],
                 })
 
-        # ===== 4b. 规则提取：从 API 请求推断输入参数 =====
+        # 4b. 从请求体里推断这个模块需要啥外部参数
         for call in api_calls:
             body = call.request_body
             if not isinstance(body, dict):
                 continue
             params = self._extract_params_from_request(body)
-            if params:
-                analysis.setdefault("input_params", []).extend(params)
+            for p in params:
+                analysis["input_params"] = analysis.get("input_params", [])
+                analysis["input_params"].append({
+                    "field": p["field"],
+                    "value": p["value"],
+                    "from_api": f"{call.method} {call.path}",
+                })
 
-        # ===== 4c. AI 深度分析：依赖推断（AI + 前端知识增强）=====
-        # 将 APICall 对象转为 SmartDependencyInferencer 所需的 dict 格式
-        # 截断大响应体，避免撑爆 AI prompt
-        recordings = []
-        for call in api_calls:
-            rec = {
-                "sequence": call.step_index,
-                "method": call.method,
-                "path": call.path,
-                "url": call.url,
-            }
-            if isinstance(call.request_body, dict):
-                rec["request_body"] = self._truncate_for_inference(call.request_body, max_str_len=500)
-            if isinstance(call.response_body, dict):
-                rec["response_body"] = self._truncate_for_inference(call.response_body, max_str_len=500)
-            recordings.append(rec)
-
-        inferred_deps = []
+        # 4c. 试着让 AI 推断一下依赖关系
         try:
-            from ai.dependency_analyzer import SmartDependencyInferencer
-            analyzer = SmartDependencyInferencer()
-            inferred_deps = analyzer.analyze_dependencies(recordings)
-            if inferred_deps:
-                print(f"   AI 推断依赖: {len(inferred_deps)} 个")
-        except Exception as e:
-            print(f"   ⚠️ AI 依赖分析失败: {e}，使用规则匹配回退")
+            from orchestrator.smart_inference import CrossModuleInferencer
+            inferencer = CrossModuleInferencer()
+            inferred_deps = inferencer.infer_all()
+            for dep in inferred_deps:
+                analysis["dependencies"].append({
+                    "from_sequence": dep.get("from_sequence"),
+                    "from_field": dep.get("from_field"),
+                    "to_sequence": dep.get("to_sequence"),
+                    "to_field": dep.get("to_field"),
+                    "confidence": dep.get("confidence", 0.9),
+                    "reasoning": dep.get("reasoning", ""),
+                    "source": "ai",
+                })
+        except Exception:
+            pass
 
-        # AI 分析结果转换为模块依赖格式
-        for dep in inferred_deps:
-            analysis["dependencies"].append({
-                "from_sequence": dep.get("from_sequence"),
-                "from_field": dep.get("from_field"),
-                "to_sequence": dep.get("to_sequence"),
-                "to_field": dep.get("to_field"),
-                "confidence": dep.get("confidence", 0.9),
-                "reasoning": dep.get("reasoning", ""),
-                "source": "ai",
-            })
-
-        # ===== 4d. 跨模块依赖：对比已录制模块（规则匹配补充）=====
+        # 4d. 跟已有的模块比对一下，看看有没有依赖
         try:
             from knowledge import list_modules, load_module_definition
             existing_modules = list_modules()
@@ -584,25 +519,24 @@ class TwoStepRecorder:
     def _extract_ids_from_response(
         self, data: Any, prefix: str = "", max_depth: int = 5
     ) -> Dict[str, Any]:
-        """递归提取响应中的 ID 类段"""
+        """从响应数据里挖 ID 类的字段"""
         if max_depth <= 0:
             return {}
 
         ids = {}
+        # 常见的 ID 关键字
         id_keywords = {"id", "Id", "ID", "uuid", "code", "no", "number", "seq"}
 
         if isinstance(data, dict):
             for key, value in data.items():
                 path = f"{prefix}.{key}" if prefix else key
-                # ID 类字段 + 有值
                 if any(kw in key for kw in id_keywords) and value:
                     if isinstance(value, (str, int)) and len(str(value)) < 100:
                         ids[path] = value
-                # 递归搜索嵌套
                 if isinstance(value, dict):
                     ids.update(self._extract_ids_from_response(value, path, max_depth - 1))
                 elif isinstance(value, list) and value:
-                    for i, item in enumerate(value[:3]):  # 只搜前3个
+                    for i, item in enumerate(value[:3]):  # 翻前几个就够了
                         if isinstance(item, dict):
                             ids.update(
                                 self._extract_ids_from_response(item, f"{path}[{i}]", max_depth - 1)
@@ -611,12 +545,7 @@ class TwoStepRecorder:
 
     @staticmethod
     def _truncate_for_inference(data: Any, max_str_len: int = 500, max_list: int = 10, depth: int = 0) -> Any:
-        """截断大数据结构，避免撑爆 AI prompt
-
-        - 字符串值超过 max_str_len 时截断
-        - 列表超过 max_list 项时只保留前 N 项
-        - 深度超过 5 层停止展开
-        """
+        """砍掉太大的数据，别撑爆 AI prompt"""
         if depth > 5:
             return "...(截断)"
         if isinstance(data, dict):
@@ -635,7 +564,7 @@ class TwoStepRecorder:
         return data
 
     def _extract_params_from_request(self, data: Any, prefix: str = "", max_depth: int = 4) -> List[Dict]:
-        """提取请求体中的参数名"""
+        """把请求体里的参数名和值捞出来"""
         params = []
         id_keywords = {"id", "Id", "ID", "uuid", "code"}
 
@@ -657,10 +586,7 @@ class TwoStepRecorder:
         existing_module_name: str,
         existing_module_def: Dict,
     ) -> Optional[Dict]:
-        """推断当前模块与已存在模块的依赖关系
-
-        通过匹配当前模块请求参数中的 ID 值与已有模块提取变量来推断依赖。
-        """
+        """看看当前模块是不是依赖了某个已有模块的输出"""
         existing_vars = existing_module_def.get("smart_analysis", {}).get("extract_vars", [])
         if not existing_vars:
             return None
@@ -669,7 +595,7 @@ class TwoStepRecorder:
             body = call.request_body
             if not isinstance(body, dict):
                 continue
-            # 递归搜索请求体中的所有值
+            # 把请求体里的值都摊平
             request_values = self._flatten_values(body)
             for var in existing_vars:
                 example_val = var.get("example_value", "")
@@ -684,7 +610,7 @@ class TwoStepRecorder:
 
     @staticmethod
     def _flatten_values(data: Any) -> List[str]:
-        """递归提取 dict 中所有字符串值"""
+        """递归地把 dict 里的字符串值都捞出来"""
         values = []
         if isinstance(data, dict):
             for v in data.values():
@@ -705,12 +631,11 @@ class TwoStepRecorder:
         har_url_filter: str,
         headless: bool,
     ) -> str:
-        """生成临时 wrapper 脚本，注入 HAR + Trace 上下文
+        """拼一个临时 pytest 脚本出来，用来回放+录 HAR+Trace
 
-        使用 string.Template 代替 f-string，避免 JSON 字典中的花括号转义问题。
-        路径统一用正斜杠，避免 Windows 反斜杠问题。
+        用 Template 而不是 f-string，因为里面有 JSON 花括号会报错。
         """
-        # 统一路径分隔符为正斜杠（Python 在所有平台都接受 /）
+        # 统一用正斜杠，Windows 也不怕
         raw_script_path = raw_script_path.replace("\\", "/")
         har_path = har_path.replace("\\", "/")
         trace_path = trace_path.replace("\\", "/")
@@ -725,7 +650,7 @@ import time
 from pathlib import Path
 from playwright.sync_api import sync_playwright
 
-# 通用守卫：登录、弹窗、异常处理
+# 守卫：登录恢复、弹窗处理
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath("__file__"))))
 from recorder.guards import ensure_logged_in, dismiss_dialogs, wait_for_page_ready
 
@@ -744,6 +669,7 @@ def test_record_with_har():
                 ],
             )
         except Exception:
+            # 没装 Chrome 就用默认 Chromium
             browser = p.chromium.launch(
                 headless=$headless_flag,
                 args=[
@@ -755,6 +681,7 @@ def test_record_with_har():
         context = browser.new_context(
             storage_state="$storage_state",
             record_har_path="$har_path",
+            $har_url_filter_option
             record_har_content="embed",
             ignore_https_errors=True,
             viewport={"width": 1366, "height": 768},
@@ -765,15 +692,15 @@ def test_record_with_har():
 
         page = context.new_page()
 
-        # 设置较长的超时时间（headless 回放可能很慢）
+        # headless 回放可能比较慢
         page.set_default_timeout(30000)
         page.set_default_navigation_timeout(60000)
 
-        # 读取预处理后的脚本（已注入时间戳、等待、守卫调用）
+        # 读取预处理好的脚本
         raw_path = Path("$raw_script_path")
         raw_source = raw_path.read_text(encoding="utf-8")
 
-        # 在 exec_globals 中执行 raw_script
+        # 准备 exec 环境
         exec_globals = {
             "page": page,
             "context": context,
@@ -797,7 +724,7 @@ def test_record_with_har():
         try:
             exec(raw_source, exec_globals)
 
-            # 找到 codegen 生成的 test 函数并调用它
+            # 找到 codegen 生成的 test 函数并调用
             test_fn = None
             for name, obj in exec_globals.items():
                 if callable(obj) and (name.startswith("test_") or name == "run"):
@@ -833,12 +760,18 @@ def test_record_with_har():
             print(f"⚠️ 回放执行错误: {e}")
             traceback.print_exc()
 
-        # 保存 Trace
-        context.tracing.stop(path="$trace_path")
+        finally:
+            # 不管成功失败，Trace 和 HAR 都得保存
+            try:
+                context.tracing.stop(path="$trace_path")
+            except Exception as trace_err:
+                print(f"⚠️ Trace 保存失败: {trace_err}")
 
-        # 关闭 context（必须 close 才保存 HAR）
-        context.close()
-        browser.close()
+            try:
+                context.close()
+            except Exception as close_err:
+                print(f"⚠️ context.close() 失败: {close_err}")
+            browser.close()
 
     print("✅ HAR + Trace 录制完成")
 ''')
@@ -848,6 +781,7 @@ def test_record_with_har():
             storage_state=storage_state,
             har_path=har_path,
             har_url_filter=har_url_filter,
+            har_url_filter_option=f'record_har_url_filter="{har_url_filter}",' if har_url_filter else "",
             raw_script_path=raw_script_path,
             trace_path=trace_path,
         )

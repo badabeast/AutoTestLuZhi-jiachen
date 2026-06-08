@@ -56,7 +56,7 @@ class TestConfig:
         creds = config.get_login_credentials()
 
     环境通过 URL 域名自动识别：
-        .test. → TEST, staging. → STAGING, www.zcygov.cn → PRO
+        .test. → TEST, staging. → STAGING, www.example.com → PRO
     """
 
     _instances: Dict[str, "TestConfig"] = {}
@@ -74,8 +74,8 @@ class TestConfig:
             return TestEnvironment.TEST
         if "staging." in url:
             return TestEnvironment.STAGING
-        if "zcygov.cn" in url:
-            return TestEnvironment.PRO
+        if "example" in url or ".test." in url:
+            return TestEnvironment.TEST
         return TestEnvironment.TEST
 
     def _detect_env(self) -> TestEnvironment:
@@ -88,7 +88,7 @@ class TestConfig:
         self._projects = {
             "web-car": EnvProjectConfig(
                 name="web-car",
-                base_url=os.environ.get("WEB_CAR_URL", "https://vehicle.test.zcygov.cn"),
+                base_url=os.environ.get("WEB_CAR_URL", "https://vehicle.example.test.com"),
                 api_prefix="/api/car",
                 login_account=os.environ.get("WEB_CAR_ACCOUNT", ""),
                 login_password=os.environ.get("WEB_CAR_PASSWORD", ""),
@@ -96,7 +96,7 @@ class TestConfig:
             ),
             "web-demand": EnvProjectConfig(
                 name="web-demand",
-                base_url=os.environ.get("WEB_DEMAND_URL", "https://www.test.zcygov.cn"),
+                base_url=os.environ.get("WEB_DEMAND_URL", "https://www.example.test.com"),
                 api_prefix="/api/demand",
                 login_account=os.environ.get("WEB_DEMAND_ACCOUNT", ""),
                 login_password=os.environ.get("WEB_DEMAND_PASSWORD", ""),

@@ -1,21 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-HARParser — 直接 json.load 解析 Playwright HAR 文件
-
-HAR 是 HTTP Archive 1.2 标准 JSON 格式，包含完整的请求/响应数据。
-不依赖 haralyzer 等第三方库，直接解析更可控。
-
-用法::
-    parser = HARParser(url_filter="**/api/**")
-    calls = parser.parse("output/modules/create_demand/api.har")
-    for call in calls:
-        print(f"{call.method} {call.path} → {call.status}")
+HARParser — 直接  解析 Playwright HAR 文件
 """
 
 import json
+import sys
 from dataclasses import dataclass, field
-from typing import List, Dict, Optional
+from typing import Any, List, Dict, Optional
 from urllib.parse import urlparse
 
 
@@ -27,31 +19,28 @@ class APICall:
     url: str                         # 完整 URL
     path: str                        # URL 路径部分
     request_headers: Dict = field(default_factory=dict)
-    request_body: Optional[Any] = None   # 请求体（dict 或 raw string）
+    request_body: Optional[Any] = None   # 请求体
     status: int = 0                  # 响应状态码
     response_headers: Dict = field(default_factory=dict)
-    response_body: Optional[Any] = None  # 响应体（dict 或 None）
+    response_body: Optional[Any] = None  # 响应体
     mime_type: str = ""              # 响应 MIME 类型
     timing: Dict = field(default_factory=dict)
     timestamp: str = ""              # startedDateTime
 
 
 class HARParser:
-    """直接用 json.load 解析 HAR 1.2 标准文件
-
-    Args:
-        url_filter: URL 过滤模式（如 "**/api/**"），只提取匹配的 API 请求
-                    None 表示不过滤，提取所有请求
-    """
+    # 直接用 json.load 解析 HAR 
+    
 
     def __init__(self, url_filter: Optional[str] = None):
         self.url_filter = url_filter
 
-    def parse(self, har_path: str) -> List[APICall]:
+    def parse(self, har_path: str, apply_filter: bool = True) -> List[APICall]:
         """解析 HAR 文件，提取 API 调用序列
 
         Args:
             har_path: HAR 文件路径
+            apply_filter: 是否应用 url_filter（内部调用可关闭）
 
         Returns:
             List[APICall]: API 调用记录列表（按原始顺序）
@@ -59,26 +48,28 @@ class HARParser:
         with open(har_path, 'r', encoding='utf-8') as f:
             har = json.load(f)
 
-        calls: List[APICall] = []
+        # HAR 格式校验
+        if "log" not in har or "entries" not in har["log"]:
+            print(f"⚠️ HAR 文件格式异常: {har_path}（缺少 log.entries）",
+                  file=sys.stderr)
+            return []
 
-        for i, entry in enumerate(har["log"]["entries"]):
+        entries = har["log"]["entries"]
+        use_filter = apply_filter and self.url_filter
+
+        calls: List[APICall] = []
+        for i, entry in enumerate(entries):
             req = entry["request"]
             res = entry["response"]
             url = req["url"]
 
             # URL 过滤
-            if self.url_filter and not self._url_matches(url):
+            if use_filter and not self._url_matches(url):
                 continue
 
-            # 请求 headers → dict
-            req_headers = {}
-            for h in req.get("headers", []):
-                req_headers[h["name"]] = h["value"]
+            req_headers = {h["name"]: h["value"] for h in req.get("headers", [])}
 
-            # 响应 headers → dict
-            res_headers = {}
-            for h in res.get("headers", []):
-                res_headers[h["name"]] = h["value"]
+            res_headers = {h["name"]: h["value"] for h in res.get("headers", [])}
 
             calls.append(APICall(
                 step_index=i,
@@ -98,30 +89,23 @@ class HARParser:
         return calls
 
     def parse_api_sequence(self, har_path: str) -> List[APICall]:
-        """提取所有非静态资源请求（只过滤静态资源，其余全保留）
+        """提取所有非静态资源请求
 
         过滤策略:
-          1. 排除静态资源（图片/CSS/JS/字体/source map）
+          1. 排除静态资源（图片/CSS/JS/字体/音视频/source map）
           2. 排除 OPTIONS 预检请求
           3. 其余所有请求都保留（不管是 /api/ 还是 /demand/ 等）
 
-        Args:
-            har_path: HAR 文件路径
-
-        Returns:
-            List[APICall]: 业务 API 调用列表
         """
-        # 不用 url_filter 过滤，先拿到全部请求
-        original_filter = self.url_filter
-        self.url_filter = None
-        all_calls = self.parse(har_path)
-        self.url_filter = original_filter
+        all_calls = self.parse(har_path, apply_filter=False)
 
         # 静态资源扩展名
         static_extensions = {
             '.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', '.webp',
             '.css', '.js', '.woff', '.woff2', '.ttf', '.eot',
             '.map', '.jsonld',
+            '.wasm', '.pdf',
+            '.mp4', '.webm', '.mp3', '.wav', '.ogg', '.flac',
         }
 
         business_calls = []
@@ -167,7 +151,6 @@ class HARParser:
 
         # 将 glob-like pattern 简化为字符串包含匹配
         pattern = self.url_filter
-        # 去掉 ** 通配符，简化为子串匹配
         pattern = pattern.replace("**/", "/").replace("/**", "/").replace("**", "")
         if not pattern:
             return True
@@ -191,51 +174,36 @@ class HARParser:
                 return {"_raw": text[:2000], "_parse_error": True}
         return {"_raw": text[:2000], "_mime": mime}
 
-    # 大 JSON 截断保护：响应体最大保留字符数
-    MAX_RESPONSE_CHARS = 20000
-    # 列表类型响应最多保留的元素数
-    MAX_LIST_ITEMS = 20
+    # 大 JSON 截断保护
+    MAX_RESPONSE_CHARS = 20000   # 响应体最大保留字符数
+    MAX_LIST_ITEMS = 20         # 列表最多保留元素数
 
     def _parse_response_content(self, content: dict) -> Optional[Any]:
-        """解析响应体（含大 JSON 截断保护）
-
-        HAR 中响应体在 content.text 字段。
-        只解析 JSON 响应，非 JSON（图片/CSS等）返回 None。
-        大 JSON 响应会截断列表和整体大小，避免撑爆内存和 AI prompt。
-        """
+        """解析响应体（含大小保护）"""
         text = content.get("text", "")
         if not text:
             return None
 
-        # 超大文本先截断原始内容（防止 json.loads 消耗过多内存）
-        if len(text) > self.MAX_RESPONSE_CHARS:
-            text = text[:self.MAX_RESPONSE_CHARS]
-
         mime = content.get("mimeType", "")
         if "json" in mime:
             try:
+                # 超大响应体直接截断文本再解析，避免内存爆炸
+                if len(text) > self.MAX_RESPONSE_CHARS:
+                    text = text[:self.MAX_RESPONSE_CHARS]
                 data = json.loads(text)
-                # 截断大 JSON：列表只保留前 N 项，整体限制大小
                 return self._truncate_large_json(data)
             except json.JSONDecodeError:
-                # 截断后 JSON 不完整，尝试找到最后一个完整对象
                 return {"_raw": text[:5000], "_parse_error": True}
 
-        # 非 JSON 响应不存储（图片、CSS、JS 等太大且无用）
         return None
 
     def _truncate_large_json(self, data: Any, depth: int = 0) -> Any:
-        """递归截断大 JSON 结构
-
-        - 列表最多保留 MAX_LIST_ITEMS 个元素
-        - 深度超过 6 层不再展开
-        - 保留对象的所有键（键名有语义信息）
-        """
+        #递归 JSON 结构
+        
         if depth > 6:
             return "...(深层嵌套已截断)"
 
         if isinstance(data, list):
-            # 列表过长只保留前 N 项 + 截断提示
             if len(data) > self.MAX_LIST_ITEMS:
                 truncated = [self._truncate_large_json(item, depth + 1) for item in data[:self.MAX_LIST_ITEMS]]
                 truncated.append(f"...(共{len(data)}项，已截断)")

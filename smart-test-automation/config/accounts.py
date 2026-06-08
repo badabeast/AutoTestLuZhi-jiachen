@@ -36,7 +36,7 @@ class TestAccount:
 class ProjectConfig:
     """项目配置数据类"""
     name: str
-    base_url: str           # 项目主域名（如 https://deman.test.zcygov.cn）
+    base_url: str           # 项目主域名（如 https://demand.example.test.com）
     login_page_url: str     # 前端登录页面URL（浏览器打开，供手动登录）
     login_api_url: str      # API登录接口URL（程序调用，如 /oauth/token）
     auth_header: str
@@ -81,24 +81,24 @@ class AccountManager:
                     TestAccount(
                         account=os.environ.get("WEB_DEMAND_ACCOUNT"),
                         password=os.environ.get("WEB_DEMAND_PASSWORD"),
-                        org_id="10001000304257",
-                        org_name="拓麦科技",
+                        org_id=os.environ.get("WEB_DEMAND_ORG_ID", ""),
+                        org_name=os.environ.get("WEB_DEMAND_ORG_NAME", ""),
                         role="admin",
                         description="管理员账号",
                     ),
                     TestAccount(
-                        account="tmind_1",
+                        account=os.environ.get("WEB_DEMAND_ACCOUNT_NORMAL_USER", ""),
                         password=os.environ.get("WEB_DEMAND_PASSWORD"),
-                        org_id="10001000304257",
-                        org_name="拓麦科技",
+                        org_id=os.environ.get("WEB_DEMAND_ORG_ID", ""),
+                        org_name=os.environ.get("WEB_DEMAND_ORG_NAME", ""),
                         role="user",
                         description="普通用户账号",
                     ),
                     TestAccount(
-                        account="tmind_002",
+                        account=os.environ.get("WEB_DEMAND_ACCOUNT_VIEWER", ""),
                         password=os.environ.get("WEB_DEMAND_PASSWORD"),
-                        org_id="10001000304257",
-                        org_name="拓麦科技",
+                        org_id=os.environ.get("WEB_DEMAND_ORG_ID", ""),
+                        org_name=os.environ.get("WEB_DEMAND_ORG_NAME", ""),
                         role="viewer",
                         description="查看者账号",
                     ),

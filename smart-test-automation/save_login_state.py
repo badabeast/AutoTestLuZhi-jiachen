@@ -187,8 +187,8 @@ def show_login_state():
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="登录态保存工具")
-    parser.add_argument("--url", default="https://www.test.zcygov.cn/demand_front/#/overview?_app_=zcy.demand",
-                        help="默认打开采购需求页面（自动跳转登录页）")
+    parser.add_argument("--url", default=os.environ.get("WEB_DEMAND_LOGIN_PAGE_URL", "https://www.example.test.com/demand_front/#/overview"),
+                        help="默认打开目标页面（自动跳转登录页）")
     parser.add_argument("--project", default="web-demand",
                         help="项目名称，用于从配置获取默认URL (web-demand)")
     parser.add_argument("--account", default="", help="预设账号（自动填写）")

@@ -5,14 +5,10 @@ healer 配置模块 — 供 CLI 和非 pytest 场景使用
 
 功能:
   - 封装 healer 配置加载逻辑
-  - 读取 .env 中的 zcy AI 平台 API key
+  - 读取 .env 中的 AI 平台 API key
   - 提供 get_healer_config() 函数
 
-pytest 场景不需要此模块，直接在 conftest.py 中覆盖 healing_config fixture 即可。
-此模块供 CLI heal 命令、手动脚本等非 pytest 场景调用 healer 时使用。
-
-AI Provider: zcy AI 平台（Anthropic 协议，GLM-5.1）
-healer 的 AnthropicProvider 已 patch 支持自定义 api_url。
+AI Provider: Anthropic 协议兼容平台（如 GLM-5.1）
 """
 
 import os
@@ -22,9 +18,9 @@ from typing import Optional
 from playwright_healer.config import HealerConfig, HealingStrategy
 from playwright_healer.ai_providers import AIProviderConfig, AIProvider
 
-# zcy AI 平台配置
-ZCY_API_URL = "https://ai-platform.cai-inc.com/api/biz-ai/ai-model/api/11/apps/anthropic/v1/messages"
-ZCY_MODEL = "glm-5.1"
+# AI 平台配置（默认值为通用示例地址，实际值从环境变量读取）
+DEFAULT_API_URL = os.environ.get("ZCY_HEALER_API_URL", "https://your-ai-platform.example.com/api/v1/messages")
+DEFAULT_MODEL = os.environ.get("ZCY_HEALER_MODEL", "glm-5.1")
 
 
 def load_env(env_path: Optional[str] = None) -> None:
@@ -53,9 +49,7 @@ def get_healer_config(
 ) -> HealerConfig:
     """获取 healer 配置
 
-    默认使用 zcy AI 平台（Anthropic 协议，GLM-5.1）作为 AI provider。
-    healer 的 AnthropicProvider 已 patch 支持自定义 api_url，
-    可以指向 zcy 平台的 Anthropic 协议代理。
+    默认使用 Anthropic 协议兼容平台作为 AI provider。
 
     Args:
         strategy: 自愈策略（SMART/HEURISTIC_ONLY/DOM_ONLY/FULL）
@@ -69,16 +63,21 @@ def get_healer_config(
     # 确保 .env 已加载
     load_env()
 
-    zcy_key = os.environ.get("ANTHROPIC_AUTH_TOKEN", "")
+    ai_key = os.environ.get("ANTHROPIC_AUTH_TOKEN", "")
+    api_url = os.environ.get("ZCY_HEALER_API_URL", DEFAULT_API_URL)
+    model = os.environ.get("ZCY_HEALER_MODEL", DEFAULT_MODEL)
 
-    # 构建 provider 配置
-    # zcy AI 平台走 Anthropic Messages API 协议
+    if not ai_key:
+        print("⚠️ ANTHROPIC_AUTH_TOKEN 未设置，healer AI 修复（L4）将不可用")
+        print("   请在 .env 中设置 ANTHROPIC_AUTH_TOKEN")
+
+    # 构建 provider 配置（Anthropic Messages API 协议）
     providers = [
         AIProviderConfig(
             provider=AIProvider.ANTHROPIC,
-            api_key=zcy_key,
-            model=os.environ.get("ZCY_HEALER_MODEL", ZCY_MODEL),
-            api_url=os.environ.get("ZCY_HEALER_API_URL", ZCY_API_URL),
+            api_key=ai_key,
+            model=model,
+            api_url=api_url,
         )
     ]
 
@@ -103,8 +102,8 @@ def get_healer_env_vars() -> dict:
 
     env = {
         "ANTHROPIC_AUTH_TOKEN": os.environ.get("ANTHROPIC_AUTH_TOKEN", ""),
-        "ZCY_HEALER_MODEL": os.environ.get("ZCY_HEALER_MODEL", ZCY_MODEL),
-        "ZCY_HEALER_API_URL": os.environ.get("ZCY_HEALER_API_URL", ZCY_API_URL),
+        "ZCY_HEALER_MODEL": os.environ.get("ZCY_HEALER_MODEL", DEFAULT_MODEL),
+        "ZCY_HEALER_API_URL": os.environ.get("ZCY_HEALER_API_URL", DEFAULT_API_URL),
         "PH_STRATEGY": os.environ.get("PH_STRATEGY", "SMART"),
         "PH_PREFER_ARIA": os.environ.get("PH_PREFER_ARIA", "true"),
         "PH_AUTO_PATCH_SOURCE": os.environ.get("PH_AUTO_PATCH_SOURCE", "true"),

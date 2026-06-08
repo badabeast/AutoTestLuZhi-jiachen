@@ -1,18 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-smart-test-automation CLI — 统一命令行入口
-
-子命令:
-  record <module_name>              — 录制模块（两步录制法）
-  replay <module_name>              — 重放 raw_script 生成 HAR/Trace
-  run <target_module>               — 编排+执行测试链
-  compose <target_module>           — 查看编排计划（不执行）
-  generate-script <module_name>     — 生成增强脚本
-  heal <module_name>                — 手动触发自愈
-  report                            — 查看断言报告
-  query-knowledge                   — 查询知识库
-  list                              — 列出已录制模块
+智能测试执行系统命令行入口，提供录制、编排、执行、自愈、报告等子命令。
+运行 python cli.py -h 查看完整帮助。
 """
 
 import argparse
@@ -37,65 +27,65 @@ def main():
     )
     subparsers = parser.add_subparsers(dest="command", help="子命令")
 
-    # ===== record 命令 =====
+    # ── record ──
     record_parser = subparsers.add_parser("record", help="录制业务模块（两步录制法）")
     record_parser.add_argument("module_name", help="模块名称（如 create_demand）")
     record_parser.add_argument("--url", default="", help="目标 URL（默认从配置获取）")
     record_parser.add_argument("--project", default="web-demand", help="项目名称")
     record_parser.add_argument("--storage-state", default="login_state/storage_state.json",
                               help="登录态文件路径")
-    record_parser.add_argument("--har-filter", default="**/api/**",
-                              help="HAR URL 过滤模式")
+    record_parser.add_argument("--har-filter", default="",
+                              help="HAR URL 过滤模式（默认全量捕获，由解析阶段过滤静态资源）")
     record_parser.add_argument("--headed-step2", action="store_true",
                               help="Step 2 回放使用有头模式")
 
-    # ===== replay 命令 =====
+    # ── replay ──
     replay_parser = subparsers.add_parser("replay", help="重放已有 raw_script 生成 HAR/Trace")
     replay_parser.add_argument("module_name", help="模块名称")
     replay_parser.add_argument("--storage-state", default="login_state/storage_state.json",
                                help="登录态文件路径")
     replay_parser.add_argument("--headed", action="store_true", help="有头模式")
 
-    # ===== run 命令 =====
+    # ── run ──
     run_parser = subparsers.add_parser("run", help="编排+执行测试链")
     run_parser.add_argument("target_module", help="目标模块名（如 confirm_demand）")
     run_parser.add_argument("--headed", action="store_true", help="有头模式执行")
     run_parser.add_argument("--var", action="append", default=[],
                             help="注入变量 key=value（可多次使用）")
 
-    # ===== compose 命令（查看编排计划，不执行）=====
+    # ── compose（查看编排计划，不执行）──
     compose_parser = subparsers.add_parser("compose", help="查看编排计划（不执行）")
     compose_parser.add_argument("target_module", help="目标模块名")
     compose_parser.add_argument("--save", default="", help="保存执行计划到指定路径")
 
-    # ===== generate-script 命令 =====
+    # ── generate-script ──
     gen_parser = subparsers.add_parser("generate-script", help="生成增强脚本（healer 兼容）")
     gen_parser.add_argument("module_name", help="模块名称")
     gen_parser.add_argument("--extract-vars", nargs="*", default=[],
                             help="提取变量列表（name:from_api:from_field）")
 
-    # ===== heal 命令 =====
+    # ── heal ──
     heal_parser = subparsers.add_parser("heal", help="手动触发自愈")
     heal_parser.add_argument("module_name", help="模块名称")
     heal_parser.add_argument("--headed", action="store_true", help="有头模式")
 
-    # ===== report 命令 =====
+    # ── report ──
     report_parser = subparsers.add_parser("report", help="查看断言报告")
     report_parser.add_argument("--module", default="", help="指定模块名筛选")
 
-    # ===== query-knowledge 命令 =====
+    # ── query-knowledge ──
     query_parser = subparsers.add_parser("query-knowledge", help="查询知识库")
     query_parser.add_argument("--module", default="", help="查询指定模块定义")
     query_parser.add_argument("--graph", action="store_true", help="查看依赖图")
     query_parser.add_argument("--frontend", action="store_true", help="查看前端知识文档")
     query_parser.add_argument("--api", default="", help="按 API 路径搜索前端知识")
 
-    # ===== list 命令 =====
+    # ── list ──
     list_parser = subparsers.add_parser("list", help="列出已录制模块")
 
     args = parser.parse_args()
 
-    # ===== record =====
+    # ── record ──
     if args.command == "record":
         from recorder.recording_wrapper import TwoStepRecorder
 
@@ -132,7 +122,7 @@ def main():
             print("❌ 录制失败")
             sys.exit(1)
 
-    # ===== replay =====
+    # ── replay ──
     elif args.command == "replay":
         module_dir = Path(f"output/modules/{args.module_name}")
         raw_script = module_dir / "raw_script.py"
@@ -149,7 +139,7 @@ def main():
         if not result or not result.get("har_path"):
             sys.exit(1)
 
-    # ===== run =====
+    # ── run ──
     elif args.command == "run":
         from orchestrator.orchestrator import TestChainOrchestrator
 
@@ -176,7 +166,7 @@ def main():
                 print(f"   失败模块: {', '.join(failed)}")
             sys.exit(1)
 
-    # ===== compose（查看编排计划，不执行）=====
+    # ── compose（查看编排计划，不执行）──
     elif args.command == "compose":
         from orchestrator.graph import TestChainGraph
         from orchestrator.composer import ExecutionPlanComposer
@@ -199,7 +189,7 @@ def main():
                 var_mapping = dep.get("var_mapping", {}) if isinstance(dep, dict) else {}
                 graph.add_dependency(mod_name, dep_name, var_mapping)
 
-        composer = Composer()
+        composer = ExecutionPlanComposer()
         plan = composer.compose(args.target_module, graph)
         composer.print_plan(plan)
 
@@ -212,7 +202,7 @@ def main():
             )
             print(f"  执行计划已保存: {plan_path}")
 
-    # ===== generate-script =====
+    # ── generate-script ──
     elif args.command == "generate-script":
         module_dir = Path(f"output/modules/{args.module_name}")
         raw_script = module_dir / "raw_script.py"
@@ -243,7 +233,7 @@ def main():
         )
         print(f"✅ 增强脚本已生成: {enhanced_script}")
 
-    # ===== heal =====
+    # ── heal ──
     elif args.command == "heal":
         print(f"🩹 手动触发自愈: {args.module_name}")
         script_path = f"output/modules/{args.module_name}/enhanced_script.py"
@@ -268,7 +258,7 @@ def main():
         import subprocess
         subprocess.run(cmd)
 
-    # ===== report =====
+    # ── report ──
     elif args.command == "report":
         report_candidates = []
         output_base = Path("output/modules")
@@ -310,7 +300,7 @@ def main():
             except Exception as e:
                 print(f"   ⚠️ 读取失败: {e}")
 
-    # ===== query-knowledge =====
+    # ── query-knowledge ──
     elif args.command == "query-knowledge":
         from knowledge import load_module_definition, list_modules, load_dependency_graph
 
@@ -373,7 +363,7 @@ def main():
                     api_count = len(mod_def.get("api_calls", [])) if mod_def else 0
                     print(f"   - {mod_name} ({ops_count} UI操作, {api_count} API)")
 
-    # ===== list =====
+    # ── list ──
     elif args.command == "list":
         from knowledge import list_modules, load_module_definition
 

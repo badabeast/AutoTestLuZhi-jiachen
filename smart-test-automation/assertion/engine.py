@@ -17,9 +17,12 @@
 """
 
 import json
+import logging
 import re
 from pathlib import Path
 from typing import Dict, List, Optional, Any
+
+logger = logging.getLogger(__name__)
 
 # 从拆分后的子模块导入
 from .assertion_rule import AssertionResult, AssertionLayer, AssertionStatus
@@ -62,6 +65,10 @@ class ThreeLayerAssertionEngine:
                     status=AssertionStatus.ERROR,
                     error_message=f"未知断言层: {layer}",
                 ))
+
+        passed = sum(1 for r in results if r.status == AssertionStatus.PASSED)
+        failed = sum(1 for r in results if r.status == AssertionStatus.FAILED)
+        logger.info("断言完成: %d/%d 通过, %d 失败", passed, len(results), failed)
         return results
 
     def generate_report(self, results: List[AssertionResult]) -> Dict[str, Any]:

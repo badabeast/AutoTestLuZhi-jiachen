@@ -1,16 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-ScriptTransformer — 将 codegen 输出转换为 playwright-healer 兼容格式
-
-核心转换:
-  1. page → healing_page（healer pytest fixture）
-  2. 类型注解 Page → 删除（healer 用自注册 fixture）
-  3. 注入断言桩（AI 后续填充）
-  4. 注入变量提取桩（{{demand_id}} 模板）
-
-关键：替换逻辑必须精确，避免双重替换（healing_page→healing_healing_page）
-"""
+# 测试脚本转换器
+#
+# 职责：将 Playwright codegen 原始脚本转换为 healer 兼容格式，
+# 支持 page→healing_page 替换、类型注解清理、断言桩注入、
+# 变量提取桩注入（{{variable}} 模板语法）。
+# 替换过程使用占位符保护机制防止双重替换。
 
 import re
 from pathlib import Path
