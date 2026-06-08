@@ -135,7 +135,10 @@ class AIDependencyAnalyzer:
         return self._rule_based_analysis(recordings)
 
     def _rule_based_analysis(self, recordings: List[Dict]) -> List[Dict]:
-        """基于规则的依赖分析（回退方案）"""
+        """基于规则的依赖分析（回退方案）
+
+        递归搜索响应体和请求体中的 ID 字段匹配。
+        """
         dependencies: List[Dict] = []
         id_patterns: List[str] = ["id", "Id", "uuid"]
 
@@ -147,11 +150,8 @@ class AIDependencyAnalyzer:
             if not isinstance(response_body, dict):
                 continue
 
-            extracted_ids: Dict[str, Any] = {}
-            for key, value in response_body.items():
-                if any(p in key for p in id_patterns):
-                    if isinstance(value, (int, str)) and value:
-                        extracted_ids[key] = value
+            # 递归提取响应中的 ID 字段
+            extracted_ids = self._extract_ids_recursive(response_body)
 
             if not extracted_ids:
                 continue
@@ -160,21 +160,54 @@ class AIDependencyAnalyzer:
                 request_body = next_req.get("request_body", {})
                 if not isinstance(request_body, dict):
                     continue
-                for field_name, field_value in request_body.items():
-                    if isinstance(field_value, str) and field_value:
-                        for id_key, id_value in extracted_ids.items():
-                            if str(field_value) == str(id_value):
-                                dependencies.append({
-                                    "from_sequence": current_req["sequence"],
-                                    "from_field": id_key,
-                                    "from_example": id_value,
-                                    "to_sequence": next_req["sequence"],
-                                    "to_field": field_name,
-                                    "confidence": 0.85,
-                                    "reasoning": (
-                                        f"S{current_req['sequence']}.{id_key} → "
-                                        f"S{next_req['sequence']}.{field_name}"
-                                    ),
-                                })
+                # 递归提取请求中的所有值
+                request_values = self._extract_all_values(request_body)
+                for id_key, id_value in extracted_ids.items():
+                    if str(id_value) in request_values:
+                        dependencies.append({
+                            "from_sequence": current_req["sequence"],
+                            "from_field": id_key,
+                            "from_example": id_value,
+                            "to_sequence": next_req["sequence"],
+                            "to_field": "matched_in_request",
+                            "confidence": 0.85,
+                            "reasoning": (
+                                f"S{current_req['sequence']}.{id_key}={id_value} → "
+                                f"S{next_req['sequence']} 请求中"
+                            ),
+                        })
 
         return dependencies
+
+    def _extract_ids_recursive(self, data: Any, prefix: str = "", max_depth: int = 5) -> Dict[str, Any]:
+        """递归提取 dict 中的 ID 类字段"""
+        if max_depth <= 0 or not isinstance(data, dict):
+            return {}
+        ids = {}
+        id_keywords = {"id", "Id", "ID", "uuid"}
+        for key, value in data.items():
+            path = f"{prefix}.{key}" if prefix else key
+            if any(kw in key for kw in id_keywords) and isinstance(value, (int, str)) and value:
+                ids[path] = value
+            if isinstance(value, dict):
+                ids.update(self._extract_ids_recursive(value, path, max_depth - 1))
+            elif isinstance(value, list):
+                for i, item in enumerate(value[:3]):
+                    if isinstance(item, dict):
+                        ids.update(self._extract_ids_recursive(item, f"{path}[{i}]", max_depth - 1))
+        return ids
+
+    def _extract_all_values(self, data: Any, max_depth: int = 4) -> List[str]:
+        """递归提取 dict 中所有字符串/数字值"""
+        values = []
+        if max_depth <= 0:
+            return values
+        if isinstance(data, dict):
+            for v in data.values():
+                values.extend(self._extract_all_values(v, max_depth - 1))
+        elif isinstance(data, list):
+            for v in data:
+                values.extend(self._extract_all_values(v, max_depth - 1))
+        elif isinstance(data, (str, int)) and data:
+            values.append(str(data))
+        return values

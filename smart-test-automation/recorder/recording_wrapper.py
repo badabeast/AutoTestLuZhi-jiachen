@@ -483,7 +483,7 @@ class RecordingWrapper:
         """Step 4: AI 分析（依赖推断 + 变量提取）
 
         分析 API 响应中的可提取变量，以及与已录制模块的依赖关系。
-        如果 knowledge/frontend_docs/ 中有前端沉淀文档，会作为 AI 增强上下文。
+        优先使用 AIDependencyAnalyzer（AI + 前端知识增强），失败回退规则匹配。
         """
         analysis: Dict[str, Any] = {
             "extract_vars": [],
@@ -493,32 +493,11 @@ class RecordingWrapper:
         if not api_calls:
             return analysis
 
-        # 加载前端知识（如果有），辅助变量提取和依赖推断
-        frontend_hints = ""
-        try:
-            from knowledge.frontend_loader import FrontendKnowledgeLoader
-            loader = FrontendKnowledgeLoader()
-            if loader.has_docs():
-                # 按模块名关键词搜索相关段落
-                frontend_hints = loader.load_for_module(module_name)
-                if not frontend_hints:
-                    # 回退：搜索包含 API 路径的段落
-                    for call in api_calls[:5]:
-                        frontend_hints = loader.load_for_api(call.path)
-                        if frontend_hints:
-                            break
-                if frontend_hints:
-                    print(f"   📚 前端知识增强: 已加载相关文档片段")
-        except Exception:
-            pass
-
-        # 4a. 从 API 响应推断可提取变量
+        # ===== 4a. 规则提取：从 API 响应推断可提取变量（快速、确定性高）=====
         for call in api_calls:
             resp = call.response_body
             if not isinstance(resp, dict):
                 continue
-
-            # 深度搜索响应中的 ID 类字段
             ids = self._extract_ids_from_response(resp)
             for field_path, value in ids.items():
                 var_name = f"{module_name}_{field_path.replace('.', '_').replace('[', '_').replace(']', '')}"
@@ -529,7 +508,7 @@ class RecordingWrapper:
                     "example_value": str(value)[:100],
                 })
 
-        # 4b. 从 API 请求推断所需参数（哪些可能是外部传入的）
+        # ===== 4b. 规则提取：从 API 请求推断输入参数 =====
         for call in api_calls:
             body = call.request_body
             if not isinstance(body, dict):
@@ -538,7 +517,45 @@ class RecordingWrapper:
             if params:
                 analysis.setdefault("input_params", []).extend(params)
 
-        # 4c. 对比已录制模块，推断依赖关系
+        # ===== 4c. AI 深度分析：依赖推断（AI + 前端知识增强）=====
+        # 将 APICall 对象转为 AIDependencyAnalyzer 所需的 dict 格式
+        recordings = []
+        for call in api_calls:
+            rec = {
+                "sequence": call.step_index,
+                "method": call.method,
+                "path": call.path,
+                "url": call.url,
+            }
+            if isinstance(call.request_body, dict):
+                rec["request_body"] = call.request_body
+            if isinstance(call.response_body, dict):
+                rec["response_body"] = call.response_body
+            recordings.append(rec)
+
+        ai_deps = []
+        try:
+            from ai.dependency_analyzer import AIDependencyAnalyzer
+            analyzer = AIDependencyAnalyzer()
+            ai_deps = analyzer.analyze_dependencies(recordings)
+            if ai_deps:
+                print(f"   AI 推断依赖: {len(ai_deps)} 个")
+        except Exception as e:
+            print(f"   ⚠️ AI 依赖分析失败: {e}，使用规则匹配回退")
+
+        # AI 分析结果转换为模块依赖格式
+        for dep in ai_deps:
+            analysis["dependencies"].append({
+                "from_sequence": dep.get("from_sequence"),
+                "from_field": dep.get("from_field"),
+                "to_sequence": dep.get("to_sequence"),
+                "to_field": dep.get("to_field"),
+                "confidence": dep.get("confidence", 0.9),
+                "reasoning": dep.get("reasoning", ""),
+                "source": "ai",
+            })
+
+        # ===== 4d. 跨模块依赖：对比已录制模块（规则匹配补充）=====
         try:
             from knowledge import list_modules, load_module_definition
             existing_modules = list_modules()
@@ -550,9 +567,10 @@ class RecordingWrapper:
                     continue
                 dep = self._infer_dependency(module_name, api_calls, existing_name, existing_def)
                 if dep:
+                    dep["source"] = "cross_module"
                     analysis["dependencies"].append(dep)
         except Exception:
-            pass  # knowledge 模块可能首次使用，无已有模块
+            pass
 
         if analysis["extract_vars"]:
             print(f"   可提取变量: {len(analysis['extract_vars'])} 个")

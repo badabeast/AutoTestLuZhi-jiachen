@@ -246,6 +246,7 @@ BasePage — 页面基础类
 自愈功能由 playwright-healer 的 healing_page fixture 自动提供。
 """
 
+import re
 from playwright.sync_api import expect
 
 
@@ -390,61 +391,127 @@ def test_{module_name}(healing_page) -> None:
         return ''.join(word.capitalize() for word in name.split('_'))
 
     def _group_operations_to_methods(self, operations: list, module_name: str) -> str:
-        """将操作列表按语义分组为 Page 类方法"""
+        """将操作列表按页面切换分段拆分为 Page 类方法
+
+        策略:
+          1. 第一个 goto（登录页）归入 login 方法
+          2. 后续每个 goto 作为新方法分段的标记
+          3. 按页面 URL/功能自动命名方法（如 navigate_overview、fill_demand_form）
+        """
         if not operations:
             return f"    pass  # 待录制后生成业务方法"
 
-        # 简单策略: 按导航/登录/业务/提交 分组
-        nav_ops = []
-        login_ops = []
-        biz_ops = []
+        # 将 healing_page.xxx 替换为 self.page.xxx
+        ops = [op.replace('healing_page.', 'self.page.') for op in operations]
 
-        for op in operations:
+        # 按 goto 分段
+        segments: List[Dict] = []  # [{"ops": [...], "has_goto": bool, "goto_url": str}]
+        current_segment = {"ops": [], "has_goto": False, "goto_url": ""}
+
+        for op in ops:
             if '.goto(' in op:
-                nav_ops.append(op.replace('healing_page.', 'self.page.'))
-            elif 'login' in op.lower() or '登 录' in op or '密码' in op or '用户名' in op:
-                login_ops.append(op.replace('healing_page.', 'self.page.'))
+                # 如果当前段有内容，保存它
+                if current_segment["ops"]:
+                    segments.append(current_segment)
+                # 开始新段
+                url_match = re.search(r'\.goto\(["\']([^"\']+)', op)
+                current_segment = {
+                    "ops": [op],
+                    "has_goto": True,
+                    "goto_url": url_match.group(1) if url_match else "",
+                }
             else:
-                biz_ops.append(op.replace('healing_page.', 'self.page.'))
+                current_segment["ops"].append(op)
+
+        # 最后一段
+        if current_segment["ops"]:
+            segments.append(current_segment)
 
         methods = []
         indent = "    "
 
-        # 登录方法
-        if login_ops:
-            methods.append(f"{indent}def login(self):")
-            methods.append(f"{indent}    \"\"\"执行登录操作\"\"\"")
-            for op in login_ops:
-                methods.append(f"{indent}    {op}")
-            methods.append("")
+        for i, seg in enumerate(segments):
+            # 推断方法名
+            method_name = self._infer_method_name(i, seg, module_name)
 
-        # 导航方法
-        if nav_ops:
-            methods.append(f"{indent}def navigate_to_page(self):")
-            methods.append(f"{indent}    \"\"\"导航到业务页面\"\"\"")
-            for op in nav_ops:
-                methods.append(f"{indent}    {op}")
-            methods.append("")
-
-        # 业务操作方法
-        if biz_ops:
-            methods.append(f"{indent}def do_business_action(self):")
-            methods.append(f"{indent}    \"\"\"执行 {module_name} 核心业务操作\"\"\"")
-            for op in biz_ops:
+            methods.append(f"{indent}def {method_name}(self):")
+            doc = self._infer_method_doc(i, seg, module_name)
+            methods.append(f'{indent}    """{doc}"""')
+            for op in seg["ops"]:
                 methods.append(f"{indent}    {op}")
             methods.append("")
 
         # 完整流程方法
         methods.append(f"{indent}def run_full_flow(self):")
         methods.append(f"{indent}    \"\"\"执行 {module_name} 完整业务流程\"\"\"")
-        if login_ops:
-            methods.append(f"{indent}    self.login()")
-        if nav_ops:
-            methods.append(f"{indent}    self.navigate_to_page()")
-        if biz_ops:
-            methods.append(f"{indent}    self.do_business_action()")
+        for i, seg in enumerate(segments):
+            method_name = self._infer_method_name(i, seg, module_name)
+            methods.append(f"{indent}    self.{method_name}()")
 
         return '\n'.join(methods)
+
+    def _infer_method_name(self, index: int, segment: Dict, module_name: str) -> str:
+        """根据段内容推断方法名"""
+        url = segment.get("goto_url", "")
+
+        # 第一段包含登录页
+        if index == 0 and ("login" in url or "user-login" in url):
+            return "login"
+
+        # 根据 URL 推断页面名
+        url_page_map = {
+            "overview": "navigate_overview",
+            "demand_front": "navigate_demand",
+            "waitReview": "navigate_review",
+            "demand/list": "navigate_demand_list",
+            "demand/detail": "navigate_demand_detail",
+            "demand/save": "submit_demand",
+            "workflow/execute": "submit_workflow",
+        }
+        for key, name in url_page_map.items():
+            if key in url:
+                return name
+
+        # 根据操作内容推断功能
+        ops_text = " ".join(segment["ops"])
+        action_map = {
+            "fill": "fill_form",
+            "需求单名称": "fill_demand_form",
+            "采购需求申报": "create_demand",
+            "从购物车选品": "select_products",
+            "审核": "review_submit",
+            "确定": "confirm_action",
+            "立即关联": "bind_relation",
+        }
+        for key, name in action_map.items():
+            if key in ops_text:
+                return name
+
+        # 兜底：按序号命名
+        return f"step_{index + 1}"
+
+    def _infer_method_doc(self, index: int, segment: Dict, module_name: str) -> str:
+        """推断方法文档字符串"""
+        url = segment.get("goto_url", "")
+        ops = segment.get("ops", [])
+
+        if index == 0 and ("login" in url or "user-login" in url):
+            return "登录系统"
+
+        if ".goto(" in ops[0] if ops else "":
+            # 导航段
+            return f"导航到页面: {url[:60]}"
+
+        # 根据操作内容推断
+        ops_text = " ".join(ops)
+        if "fill" in ops_text:
+            return "填写表单"
+        if "click" in ops_text and "审核" in ops_text:
+            return "提交审核"
+        if "click" in ops_text:
+            return "执行操作"
+
+        return f"{module_name} 步骤 {index + 1}"
 
     def _inject_after_last_action(self, source: str, block: str) -> str:
         """在最后一个 healing_page.xxx 操作行之后注入代码块"""
