@@ -57,11 +57,11 @@ class TwoStepRecorder:
         if har_url_filter is None:
             har_url_filter = self.har_url_filter
 
-        # 登录态得先准备好
-        if not Path(storage_state).exists():
-            print(f"❌ 登录态文件不存在: {storage_state}")
-            print(f"   请先运行: python3 save_login_state.py")
-            return None
+        # 登录态文件检查
+        storage_exists = Path(storage_state).exists()
+        if not storage_exists:
+            print(f"⚠️ 登录态文件不存在: {storage_state}")
+            print(f"   首次录制：启动浏览器后请手动登录，录制+回放后会自动保存登录态\n")
 
         output_dir = self.output_base / module_name
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -70,22 +70,40 @@ class TwoStepRecorder:
         raw_script = output_dir / "raw_script.py"
         print(f"\n🎬 Step 1: 启动 codegen 录制 [{module_name}]")
         print(f"   URL: {target_url}")
-        print(f"   登录态: {storage_state}")
+        if storage_exists:
+            print(f"   登录态: {storage_state}")
+        else:
+            print(f"   登录态: 无（首次录制，请手动登录）")
         print(f"   请在浏览器中完成 [{module_name}] 的全部操作")
         print(f"   操作完成后关闭浏览器即可\n")
 
-        # 启动命令
+        # 启动命令：有登录态才传 --load-storage
         cmd = [
             sys.executable, "-m", "playwright", "codegen",
             "--target=python-pytest",
             f"--output={raw_script}",
-            f"--load-storage={storage_state}",
             f"--viewport-size={self.viewport}",
             "--ignore-https-errors",
-            target_url,
         ]
+        if storage_exists:
+            cmd.append(f"--load-storage={storage_state}")
+        cmd.append(target_url)
 
-        result = subprocess.run(cmd, timeout=600)  # 10min，防呆
+        try:
+            result = subprocess.run(cmd, timeout=600)  # 10min 超时自动关闭
+        except subprocess.TimeoutExpired:
+            print(f"\n⏰ 录制超时（10分钟），自动关闭浏览器")
+            # 超时后浏览器进程已被终止，检查是否有产出
+            if raw_script.exists():
+                raw_content = raw_script.read_text(encoding='utf-8').strip()
+                if len(raw_content) > 50:
+                    print(f"   已有录制内容，继续处理...")
+                else:
+                    print(f"❌ 录制内容过少，退出")
+                    return None
+            else:
+                print(f"❌ 未生成脚本，退出")
+                return None
 
         if not raw_script.exists():
             print("❌ codegen 未生成脚本，退出")
@@ -117,6 +135,7 @@ class TwoStepRecorder:
             har_path=str(api_har),
             trace_path=str(trace_file),
             storage_state=storage_state,
+            storage_exists=storage_exists,
             har_url_filter=har_url_filter,
             headless=headless_step2,
         )
@@ -361,6 +380,47 @@ class TwoStepRecorder:
             "trace_path": str(trace_file) if trace_exists else None,
             "api_count": len(business) if har_exists else 0,
         }
+
+    def _save_login_state(self, target_url: str, storage_state: str):
+        """弹出浏览器让用户手动登录，登录完成后自动保存登录态
+
+        流程:
+          1. 启动 Chromium 浏览器，打开目标 URL
+          2. 用户在浏览器中手动完成登录操作
+          3. 登录成功后在终端按回车确认
+          4. 自动保存 cookies + localStorage 到 storage_state 文件
+
+        Args:
+            target_url: 目标系统 URL
+            storage_state: 登录态保存路径
+        """
+        try:
+            from playwright.sync_api import sync_playwright
+        except ImportError:
+            print("❌ 请先安装 playwright: pip install playwright")
+            return
+
+        Path(storage_state).parent.mkdir(parents=True, exist_ok=True)
+
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=False)
+            context = browser.new_context(
+                viewport={"width": 1366, "height": 768},
+                ignore_https_errors=True,
+            )
+            page = context.new_page()
+            page.goto(target_url)
+
+            print(f"\n{'='*60}")
+            print(f"🔑 请在浏览器中完成登录操作")
+            print(f"   登录成功后，回到终端按【回车】保存登录态...")
+            print(f"{'='*60}\n")
+            input()
+
+            # 保存登录态
+            context.storage_state(path=storage_state)
+            print(f"✅ 登录态已保存: {storage_state}")
+            browser.close()
 
     def _preprocess_raw_script(self, raw_script_path: str, output_dir: Path) -> Path:
         """预处理 raw_script：给 fill 加时间戳、goto 后加守卫、提取登录操作"""
@@ -628,6 +688,7 @@ class TwoStepRecorder:
         har_path: str,
         trace_path: str,
         storage_state: str,
+        storage_exists: bool,
         har_url_filter: str,
         headless: bool,
     ) -> str:
@@ -679,7 +740,7 @@ def test_record_with_har():
                 ],
             )
         context = browser.new_context(
-            storage_state="$storage_state",
+            $storage_state_option
             record_har_path="$har_path",
             $har_url_filter_option
             record_har_content="embed",
@@ -767,6 +828,18 @@ def test_record_with_har():
             except Exception as trace_err:
                 print(f"⚠️ Trace 保存失败: {trace_err}")
 
+            # 回放结束后保存登录态（首次录制时浏览器已手动登录，cookies 已拿到）
+            try:
+                import os
+                save_path = "$storage_state"
+                save_dir = os.path.dirname(save_path)
+                if save_dir:
+                    os.makedirs(save_dir, exist_ok=True)
+                context.storage_state(path=save_path)
+                print(f"🔑 登录态已更新: {save_path}")
+            except Exception as save_err:
+                print(f"⚠️ 登录态保存失败: {save_err}")
+
             try:
                 context.close()
             except Exception as close_err:
@@ -779,6 +852,7 @@ def test_record_with_har():
         return template.substitute(
             headless_flag="True" if headless else "False",
             storage_state=storage_state,
+            storage_state_option=f'storage_state="{storage_state}",' if storage_exists else "",
             har_path=har_path,
             har_url_filter=har_url_filter,
             har_url_filter_option=f'record_har_url_filter="{har_url_filter}",' if har_url_filter else "",

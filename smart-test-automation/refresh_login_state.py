@@ -23,10 +23,14 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(__file__))
 
+# 加载 .env
+from config.env_loader import load_env
+load_env()
+
 from playwright.sync_api import sync_playwright
 
 STORAGE_STATE_PATH = Path("login_state/storage_state.json")
-TARGET_URL = os.environ.get("WEB_DEMAND_LOGIN_PAGE_URL", "https://www.example.test.com/demand_front/#/overview")
+TARGET_URL = os.environ.get("WEB_DEMAND_URL", "https://www.test.zcygov.cn/demand_front/#/overview?_app_=zcy.demand&app=demand&pageSize=20")
 
 
 def refresh_login_state(manual: bool = False):

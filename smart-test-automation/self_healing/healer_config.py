@@ -64,8 +64,8 @@ def get_healer_config(
     load_env()
 
     ai_key = os.environ.get("ANTHROPIC_AUTH_TOKEN", "")
-    api_url = os.environ.get("ZCY_HEALER_API_URL", DEFAULT_API_URL)
-    model = os.environ.get("ZCY_HEALER_MODEL", DEFAULT_MODEL)
+    api_url = DEFAULT_API_URL
+    model = DEFAULT_MODEL
 
     if not ai_key:
         print("⚠️ ANTHROPIC_AUTH_TOKEN 未设置，healer AI 修复（L4）将不可用")
@@ -102,8 +102,8 @@ def get_healer_env_vars() -> dict:
 
     env = {
         "ANTHROPIC_AUTH_TOKEN": os.environ.get("ANTHROPIC_AUTH_TOKEN", ""),
-        "ZCY_HEALER_MODEL": os.environ.get("ZCY_HEALER_MODEL", DEFAULT_MODEL),
         "ZCY_HEALER_API_URL": os.environ.get("ZCY_HEALER_API_URL", DEFAULT_API_URL),
+        "ZCY_HEALER_MODEL": os.environ.get("ZCY_HEALER_MODEL", DEFAULT_MODEL),
         "PH_STRATEGY": os.environ.get("PH_STRATEGY", "SMART"),
         "PH_PREFER_ARIA": os.environ.get("PH_PREFER_ARIA", "true"),
         "PH_AUTO_PATCH_SOURCE": os.environ.get("PH_AUTO_PATCH_SOURCE", "true"),

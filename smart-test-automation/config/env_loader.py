@@ -51,7 +51,32 @@ def load_env(env_path: Optional[str] = None) -> dict:
             # 不覆盖已存在的环境变量
             os.environ.setdefault(key, value)
 
+    # 环境切换：TEST_ENV=staging 时，用 STAGING_* 变量覆盖标准变量
+    _apply_env_override()
+
     return loaded
+
+
+def _apply_env_override():
+    """根据 TEST_ENV 切换环境配置
+
+    当 TEST_ENV=staging 时，将 STAGING_WEB_DEMAND_* 变量覆盖到 WEB_DEMAND_*
+    下游代码无需任何改动。
+    """
+    env = os.environ.get("TEST_ENV", "test")
+
+    if env == "staging":
+        # 预发环境变量映射
+        mappings = {
+            "STAGING_WEB_DEMAND_URL": "WEB_DEMAND_URL",
+            "STAGING_WEB_DEMAND_ACCOUNT": "WEB_DEMAND_ACCOUNT",
+            "STAGING_WEB_DEMAND_PASSWORD": "WEB_DEMAND_PASSWORD",
+        }
+        for staging_key, standard_key in mappings.items():
+            val = os.environ.get(staging_key)
+            if val:
+                os.environ[standard_key] = val
+                print(f"[ENV] {standard_key} = {val}  (from {staging_key})")
 
 
 def _parse_value(raw: str) -> str:

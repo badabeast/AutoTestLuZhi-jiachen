@@ -25,6 +25,10 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(__file__))
 
+# 加载 .env
+from config.env_loader import load_env
+load_env()
+
 from playwright.sync_api import sync_playwright
 
 STORAGE_STATE_PATH = Path("login_state/storage_state.json")
@@ -187,8 +191,8 @@ def show_login_state():
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="登录态保存工具")
-    parser.add_argument("--url", default=os.environ.get("WEB_DEMAND_LOGIN_PAGE_URL", "https://www.example.test.com/demand_front/#/overview"),
-                        help="默认打开目标页面（自动跳转登录页）")
+    parser.add_argument("--url", default=os.environ.get("WEB_DEMAND_LOGIN_PAGE_URL", "https://login.test.zcygov.cn/user-login/#/login"),
+                        help="默认打开登录页")
     parser.add_argument("--project", default="web-demand",
                         help="项目名称，用于从配置获取默认URL (web-demand)")
     parser.add_argument("--account", default="", help="预设账号（自动填写）")

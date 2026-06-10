@@ -87,6 +87,9 @@ class HealingScriptTransformer:
         # 6. 现在安全地把占位符替换为 healing_page
         source = source.replace(PLACEHOLDER, 'healing_page')
 
+        # 6a. 表单填写经验沉淀 — 自动优化常见问题
+        source = self._apply_form_experience(source)
+
         # 6b. 注入 context/browser 别名（codegen 脚本可能引用这些变量）
         # healing_page 实际上就是一个 Page 对象，没有 context/browser
         # 如果脚本中有 context.xxx 或 browser.xxx 的调用，需要提供别名
@@ -393,12 +396,13 @@ def test_{module_name}(healing_page) -> None:
         return ''.join(word.capitalize() for word in name.split('_'))
 
     def _group_operations_to_methods(self, operations: list, module_name: str) -> str:
-        """将操作列表按页面切换分段拆分为 Page 类方法
+        """将操作列表按业务语义拆分为 PO 方法（语义定位 + 参数化）
 
         策略:
-          1. 第一个 goto（登录页）归入 login 方法
-          2. 后续每个 goto 作为新方法分段的标记
-          3. 按页面 URL/功能自动命名方法（如 navigate_overview、fill_demand_form）
+          1. 按 goto 分段（页面切换为天然边界）
+          2. 每段再按业务操作语义细分为多个方法
+          3. 选择器转换为语义定位（get_by_text + 区域相对定位）
+          4. fill 操作的值提取为方法参数
         """
         if not operations:
             return f"    pass  # 待录制后生成业务方法"
@@ -407,15 +411,13 @@ def test_{module_name}(healing_page) -> None:
         ops = [op.replace('healing_page.', 'self.page.') for op in operations]
 
         # 按 goto 分段
-        segments: List[Dict] = []  # [{"ops": [...], "has_goto": bool, "goto_url": str}]
+        segments: List[Dict] = []
         current_segment = {"ops": [], "has_goto": False, "goto_url": ""}
 
         for op in ops:
             if '.goto(' in op:
-                # 如果当前段有内容，保存它
                 if current_segment["ops"]:
                     segments.append(current_segment)
-                # 开始新段
                 url_match = re.search(r'\.goto\(["\']([^"\']+)', op)
                 current_segment = {
                     "ops": [op],
@@ -424,8 +426,6 @@ def test_{module_name}(healing_page) -> None:
                 }
             else:
                 current_segment["ops"].append(op)
-
-        # 最后一段
         if current_segment["ops"]:
             segments.append(current_segment)
 
@@ -433,34 +433,404 @@ def test_{module_name}(healing_page) -> None:
         indent = "    "
 
         for i, seg in enumerate(segments):
-            # 推断方法名
-            method_name = self._infer_method_name(i, seg, module_name)
-
-            methods.append(f"{indent}def {method_name}(self):")
-            doc = self._infer_method_doc(i, seg, module_name)
-            methods.append(f'{indent}    """{doc}"""')
-            for op in seg["ops"]:
-                methods.append(f"{indent}    {op}")
+            # 对每个段进一步按业务语义拆分为子方法
+            sub_methods = self._split_segment_to_methods(seg, i, module_name)
+            methods.extend(sub_methods)
             methods.append("")
 
         # 完整流程方法
-        methods.append(f"{indent}def run_full_flow(self):")
-        methods.append(f"{indent}    \"\"\"执行 {module_name} 完整业务流程\"\"\"")
+        # 收集所有方法名和参数
+        all_method_calls = []
         for i, seg in enumerate(segments):
-            method_name = self._infer_method_name(i, seg, module_name)
-            methods.append(f"{indent}    self.{method_name}()")
+            sub_methods = self._split_segment_to_methods(seg, i, module_name)
+            for m in sub_methods:
+                # 从 def 行提取方法名和参数
+                def_match = re.search(r'def (\w+)\(([^)]*)\)', m)
+                if def_match:
+                    mname = def_match.group(1)
+                    params_str = def_match.group(2).strip()
+                    # 去掉 self，提取参数默认值
+                    param_parts = [p.strip() for p in params_str.split(',') if p.strip() and p.strip() != 'self']
+                    call_args = []
+                    for p in param_parts:
+                        if '=' in p:
+                            pname = p.split('=')[0].strip()
+                            call_args.append(f"{pname}={pname}")
+                    if call_args:
+                        all_method_calls.append(f"{indent}    self.{mname}({', '.join(call_args)})")
+                    else:
+                        all_method_calls.append(f"{indent}    self.{mname}()")
+
+        methods.append(f"{indent}def run_full_flow(self, **kwargs):")
+        methods.append(f"{indent}    \"\"\"执行 {module_name} 完整业务流程\n")
+        methods.append(f"{indent}    可通过 kwargs 覆盖默认参数\"\"\"")
+        for call in all_method_calls:
+            methods.append(call)
 
         return '\n'.join(methods)
+
+    def _split_segment_to_methods(self, segment: Dict, seg_index: int, module_name: str) -> List[str]:
+        """将一个 goto 段按业务操作语义拆分为多个细粒度方法
+
+        拆分策略：
+          - goto 行 → navigate 方法
+          - 连续 fill 操作 → fill_xxx 方法（值提取为参数）
+          - button click + 弹窗操作 → submit/confirm 方法
+          - 其他 click → 单独操作方法
+        """
+        ops = segment["ops"]
+        indent = "    "
+        methods = []
+
+        # 先把操作按业务语义分组
+        groups = self._group_by_business_action(ops, seg_index)
+
+        for group in groups:
+            method_name = group["name"]
+            method_doc = group["doc"]
+            method_ops = group["ops"]
+            params = group.get("params", {})
+
+            # 构建参数列表
+            param_str = "self"
+            if params:
+                param_parts = [f'{k}="{v}"' for k, v in params.items()]
+                param_str += ", " + ", ".join(param_parts)
+
+            method_lines = []
+            method_lines.append(f"{indent}def {method_name}({param_str}):")
+            method_lines.append(f'{indent}    """{method_doc}"""')
+
+            # 转换操作行：语义定位 + 参数引用
+            for op in method_ops:
+                converted = self._convert_to_semantic_op(op, params)
+                method_lines.append(f"{indent}    {converted}")
+
+            method_lines.append("")
+            methods.append('\n'.join(method_lines))
+
+        return methods
+
+    def _group_by_business_action(self, ops: List[str], seg_index: int) -> List[Dict]:
+        """按业务语义将操作行分组
+
+        分组策略（三级粒度）:
+          1. goto → 独立的 navigate 方法
+          2. 连续的 fill + 配套的 click/check/select → 合并为一个 fill_xxx 方法
+          3. 有明确业务含义的 button click（如"提交""确定""知道了"）→ 独立方法
+
+        不拆太碎：避免每个 click 一个方法。
+        """
+        groups = []
+        current_ops = []
+        current_name = ""
+        current_doc = ""
+        current_params = {}
+        current_fill_labels = []  # 收集 fill 的标签用于命名
+
+        def flush():
+            if current_ops:
+                # 如果没有名字，根据收集的 fill 标签命名
+                name = current_name
+                doc = current_doc
+                if not name and current_fill_labels:
+                    first_label = current_fill_labels[0]
+                    name = f"fill_{self._sanitize_name(first_label)}"
+                    doc = f"填写{'/'.join(current_fill_labels[:3])}"
+                elif not name:
+                    name = f"step_{seg_index}_{len(groups) + 1}"
+                    doc = current_doc or "步骤操作"
+                groups.append({
+                    "name": name,
+                    "doc": doc,
+                    "ops": current_ops[:],
+                    "params": dict(current_params),
+                })
+
+        # 关键业务按钮列表（遇到这些按钮才开新组）
+        BREAKPOINT_BUTTONS = [
+            "提交", "确定", "知道了", "取消", "批量填充",
+            "商品链接识别", "立即关联", "保存", "下一步",
+        ]
+
+        for op in ops:
+            # goto → 独立方法
+            if '.goto(' in op:
+                flush()
+                current_ops = [op]
+                current_name = ""
+                current_doc = ""
+                current_params = {}
+                current_fill_labels = []
+                url_match = re.search(r'\.goto\(["\']([^"\']+)', op)
+                url = url_match.group(1) if url_match else ""
+                current_name = self._infer_navigate_name(url, seg_index)
+                current_doc = f"导航到页面: {url[:80]}"
+                flush()
+                current_ops = []
+                current_name = ""
+                current_doc = ""
+                continue
+
+            action_type, label_text = self._extract_action_semantic(op)
+
+            # 判断是否是断点按钮（需要开新组）
+            is_breakpoint = False
+            if action_type == "button_click" and label_text:
+                is_breakpoint = any(bp in label_text for bp in BREAKPOINT_BUTTONS)
+
+            if is_breakpoint:
+                # 先 flush 之前的操作
+                flush()
+                current_ops = [op]
+                current_name = self._sanitize_name(label_text)
+                current_doc = f"点击「{label_text}」"
+                current_params = {}
+                current_fill_labels = []
+                # 如果后面紧跟弹窗操作，合并进来（由下一个循环判断）
+                flush()
+                current_ops = []
+                current_name = ""
+                current_doc = ""
+                continue
+
+            # fill 操作：收集到当前组
+            if action_type == "fill":
+                current_ops.append(op)
+                if label_text:
+                    current_fill_labels.append(label_text)
+                    # fill 的值提取为参数
+                    value_match = re.search(r'\.fill\(["\']([^"\']*)["\']\)', op)
+                    if value_match:
+                        param_name = self._sanitize_name(label_text)
+                        current_params[param_name] = value_match.group(1)
+                # 更新方法名（用第一个 fill 标签）
+                if not current_name and current_fill_labels:
+                    current_name = f"fill_{self._sanitize_name(current_fill_labels[0])}"
+                    current_doc = f"填写{'/'.join(current_fill_labels[:3])}"
+                continue
+
+            # click / check / select：合并到当前组（配套操作）
+            current_ops.append(op)
+            if action_type == "check" and label_text:
+                if not current_name:
+                    current_name = f"check_{self._sanitize_name(label_text)}"
+                    current_doc = f"勾选{label_text}"
+            elif action_type == "click" and label_text:
+                # 非 button 的 click（如文本点击展开选项），也合并
+                if not current_name:
+                    current_name = f"click_{self._sanitize_name(label_text)}"
+                    current_doc = f"点击{label_text}"
+
+        flush()
+        return groups
+
+    def _extract_action_semantic(self, op: str) -> tuple:
+        """从操作行提取操作类型和语义标签
+
+        Returns:
+            (action_type, label_text)
+            action_type: "fill" | "button_click" | "click" | "select" | "check" | "navigate" | "other"
+            label_text: 人可读的标签文本
+        """
+        # goto
+        if '.goto(' in op:
+            return ("navigate", "")
+
+        # fill — 从 name= 或 get_by_text 提取标签
+        if '.fill(' in op:
+            label = self._extract_label_from_locator(op)
+            return ("fill", label)
+
+        # check
+        if '.check(' in op:
+            label = self._extract_label_from_locator(op)
+            return ("check", label)
+
+        # select_option
+        if '.select_option(' in op:
+            return ("select", "")
+
+        # click — 区分按钮点击和普通点击
+        if '.click(' in op:
+            label = self._extract_label_from_locator(op)
+            # 检查是否是按钮/链接/菜单项
+            if any(kw in op for kw in ['role="button"', 'get_by_role("button"', 'get_by_text']):
+                return ("button_click", label)
+            return ("click", label)
+
+        return ("other", "")
+
+    def _extract_label_from_locator(self, op: str) -> str:
+        """从定位器中提取人可读的标签文本
+
+        优先级:
+          1. get_by_role(xxx, name="标签") → "标签"
+          2. get_by_text("标签") → "标签"
+          3. get_by_label("标签") → "标签"
+          4. CSS/ID 选择器 → 空字符串（无法推断语义）
+        """
+        # get_by_role(xxx, name="标签")
+        role_name_match = re.search(r'get_by_role\(\s*\w+\s*,\s*name="([^"]+)"', op)
+        if role_name_match:
+            return role_name_match.group(1)
+
+        # get_by_text("标签")
+        text_match = re.search(r'get_by_text\(["\']([^"\']+)["\']\)', op)
+        if text_match:
+            return text_match.group(1)
+
+        # get_by_label("标签")
+        label_match = re.search(r'get_by_label\(["\']([^"\']+)["\']\)', op)
+        if label_match:
+            return label_match.group(1)
+
+        return ""
+
+    def _convert_to_semantic_op(self, op: str, params: Dict) -> str:
+        """将 codegen 原始操作转换为语义定位版本
+
+        策略:
+          - get_by_role / get_by_text / get_by_label → 保留（已经是语义定位）
+          - locator("css选择器") → 尝试转为 get_by_text 区域定位
+          - fill 的值 → 替换为参数引用
+        """
+        result = op
+
+        # 如果已经是语义定位器（get_by_role, get_by_text, get_by_label），保留
+        if any(kw in op for kw in ['get_by_role(', 'get_by_text(', 'get_by_label(']):
+            # 只需处理 fill 值的参数化
+            result = self._parametrize_fill_value(result, params)
+            return result
+
+        # CSS/ID 定位器 → 尝试语义转换
+        # locator("#xxx") 或 locator("css选择器")
+        locator_match = re.search(r'self\.page\.locator\("([^"]+)"\)', op)
+        if locator_match:
+            css_selector = locator_match.group(1)
+            # 如果操作包含 .get_by_text 或有 name 参数的复合定位器，保留
+            if 'get_by_text(' in op or 'name=' in op:
+                result = self._parametrize_fill_value(result, params)
+                return result
+
+            # 纯 CSS 定位器无法自动转语义，保留原样但标注
+            result = self._parametrize_fill_value(result, params)
+            return result
+
+        # 其他情况：保留原样 + 参数化 fill 值
+        result = self._parametrize_fill_value(result, params)
+        return result
+
+    def _parametrize_fill_value(self, op: str, params: Dict) -> str:
+        """将 fill 操作的硬编码值替换为参数引用"""
+        if '.fill(' not in op:
+            return op
+
+        # 找 fill 的值
+        fill_match = re.search(r'\.fill\(["\']([^"\']*)["\']\)', op)
+        if not fill_match:
+            return op
+
+        fill_value = fill_match.group(1)
+        if not fill_value:
+            return op
+
+        # 检查值是否匹配某个参数的默认值
+        for param_name, default_val in params.items():
+            if fill_value == default_val:
+                # 替换为参数引用
+                result = op.replace(f'.fill("{fill_value}")', f'.fill({param_name})')
+                result = result.replace(f".fill('{fill_value}')", f".fill({param_name})")
+                return result
+
+        return op
+
+    def _infer_navigate_name(self, url: str, seg_index: int) -> str:
+        """根据 URL 推断导航方法名"""
+        url_method_map = {
+            "overview": "navigate_to_overview",
+            "demand_front": "navigate_to_demand",
+            "waitReview": "navigate_to_review",
+            "demand/list": "navigate_to_demand_list",
+            "demand/detail": "navigate_to_demand_detail",
+            "demand/save": "navigate_to_save_demand",
+        }
+        for key, name in url_method_map.items():
+            if key in url:
+                return name
+
+        if seg_index == 0:
+            return "navigate_to_page"
+
+        return f"navigate_step_{seg_index + 1}"
+
+    def _sanitize_name(self, text: str) -> str:
+        """将中文/特殊字符标签转为可用的方法名/参数名
+
+        例如: "* 需求单名称" → "demand_name"
+              "商品链接识别" → "product_link_detect"
+        """
+        # 去掉前缀标记
+        text = text.lstrip("* ").strip()
+
+        # 中文关键词 → 英文映射
+        cn_to_en = {
+            "需求单名称": "demand_name",
+            "需求名称": "demand_name",
+            "经费项目号": "fund_code",
+            "费用类型": "expense_type",
+            "预算科目": "budget_type",
+            "经办人": "manager_name",
+            "采购实施主体": "purchase_entity",
+            "是否需要指标编码": "need_target_code",
+            "是否上报建议书": "need_proposal",
+            "采购方式": "purchase_method",
+            "执行方式": "exec_method",
+            "商品链接识别": "add_product_by_url",
+            "商品链接": "product_url",
+            "请输入链接": "product_url",
+            "立即关联": "bind_budget",
+            "批量填充": "batch_fill",
+            "提交": "submit_demand",
+            "确定": "confirm",
+            "知道了": "confirm_submit",
+            "取消": "cancel",
+            "请选择": "select",
+            "采购中心": "purchase_center",
+            "分散采购": "decentralized_purchase",
+            "自行采购": "self_purchase",
+            "办公用品": "office_supplies",
+            "办公费": "office_expense",
+            "审核人": "auditor_name",
+            "选择审核人": "select_auditor",
+            "请输入后选择": "search_and_select",
+            "我提交的需求": "my_demands",
+            "请输入": "search_keyword",
+            "采购需求管理": "demand_management",
+            "采购需求申报": "demand_declaration",
+        }
+
+        # 精确匹配
+        if text in cn_to_en:
+            return cn_to_en[text]
+
+        # 包含匹配
+        for cn, en in cn_to_en.items():
+            if cn in text:
+                return en
+
+        # 兜底：去掉特殊字符
+        name = re.sub(r'[^\w]', '_', text)
+        name = re.sub(r'_+', '_', name).strip('_')
+        return name if name else "value"
 
     def _infer_method_name(self, index: int, segment: Dict, module_name: str) -> str:
         """根据段内容推断方法名"""
         url = segment.get("goto_url", "")
 
-        # 第一段包含登录页
         if index == 0 and ("login" in url or "user-login" in url):
             return "login"
 
-        # 根据 URL 推断页面名
         url_page_map = {
             "overview": "navigate_overview",
             "demand_front": "navigate_demand",
@@ -474,7 +844,6 @@ def test_{module_name}(healing_page) -> None:
             if key in url:
                 return name
 
-        # 根据操作内容推断功能
         ops_text = " ".join(segment["ops"])
         action_map = {
             "fill": "fill_form",
@@ -489,7 +858,6 @@ def test_{module_name}(healing_page) -> None:
             if key in ops_text:
                 return name
 
-        # 兜底：按序号命名
         return f"step_{index + 1}"
 
     def _infer_method_doc(self, index: int, segment: Dict, module_name: str) -> str:
@@ -501,10 +869,8 @@ def test_{module_name}(healing_page) -> None:
             return "登录系统"
 
         if ".goto(" in ops[0] if ops else "":
-            # 导航段
             return f"导航到页面: {url[:60]}"
 
-        # 根据操作内容推断
         ops_text = " ".join(ops)
         if "fill" in ops_text:
             return "填写表单"
@@ -644,3 +1010,47 @@ def test_{module_name}(healing_page) -> None:
             lines.append(block)
 
         return '\n'.join(lines)
+
+    # ── 表单填写经验沉淀 ────────────────────────────────────
+
+    def _apply_form_experience(self, source: str) -> str:
+        """将表单填写经验自动应用到 enhanced_script
+
+        经验规则（从实际验证中总结）:
+
+        规则1 - goto 加超时:
+          codegen 产出: healing_page.goto("url")
+          优化后:       healing_page.goto("url", timeout=30000, wait_until="domcontentloaded")
+          原因: 测试环境页面加载慢，默认 30s 超时不够
+
+        规则2 - goto 后不加 networkidle:
+          不使用 wait_for_load_state("networkidle")
+          原因: 测试环境有轮询请求，networkidle 永远达不到
+          替代: 等页面关键元素出现
+
+        规则3 - 弹窗后操作加等待:
+          点击"提交""确定""审核"等按钮后，下一个操作前加 time.sleep(1)
+          原因: 弹窗关闭有动画，下个弹窗可能还没渲染完
+
+        规则4 - 保留录制的原始选择器:
+          codegen 录出来的选择器（CSS/ID）是最可靠的
+          不要尝试用 get_by_text 替换（同一个文本页面出现多次会选错）
+
+        规则5 - 下拉选择保留原始流程:
+          录制的 click → option 两步不要合并
+          不要用 _wait_and_select_option 替换（可能选错下拉框）
+        """
+        # 规则1: goto 加超时和 domcontentloaded
+        source = re.sub(
+            r'healing_page\.goto\(("([^"]+)")\)',
+            r'healing_page.goto(\1, timeout=30000, wait_until="domcontentloaded")',
+            source,
+        )
+        # 已经有 timeout 参数的不重复加
+        source = re.sub(
+            r'healing_page\.goto\(("([^"]+)", timeout=(\d+), wait_until="domcontentloaded"), timeout=(\d+), wait_until="domcontentloaded"\)',
+            r'healing_page.goto(\1)',
+            source,
+        )
+
+        return source

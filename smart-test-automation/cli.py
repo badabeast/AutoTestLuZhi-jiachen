@@ -50,6 +50,8 @@ def main():
     run_parser = subparsers.add_parser("run", help="编排+执行测试链")
     run_parser.add_argument("target_module", help="目标模块名（如 confirm_demand）")
     run_parser.add_argument("--headed", action="store_true", help="有头模式执行")
+    run_parser.add_argument("--no-heal", action="store_true",
+                            help="禁用自愈（调试用）")
     run_parser.add_argument("--var", action="append", default=[],
                             help="注入变量 key=value（可多次使用）")
 
@@ -155,6 +157,7 @@ def main():
             target_module=args.target_module,
             headed=args.headed,
             variables=variables if variables else None,
+            no_heal=args.no_heal,
         )
 
         if report.get("success"):

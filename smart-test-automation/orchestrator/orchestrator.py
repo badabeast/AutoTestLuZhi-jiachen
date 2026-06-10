@@ -72,6 +72,7 @@ class TestChainOrchestrator:
         target_module: str,
         headed: bool = False,
         variables: Optional[Dict[str, str]] = None,
+        no_heal: bool = False,
     ) -> Dict[str, Any]:
         """编排并执行测试链
 
@@ -79,6 +80,7 @@ class TestChainOrchestrator:
             target_module: 目标模块名
             headed: 是否有头模式
             variables: 外部注入变量
+            no_heal: 是否禁用自愈
 
         Returns:
             dict: 执行报告
@@ -119,7 +121,7 @@ class TestChainOrchestrator:
                 break
 
             # 执行脚本
-            module_result = self._execute_module(script_path, headed)
+            module_result = self._execute_module(script_path, headed, no_heal=no_heal)
             results.append(module_result)
 
             if not module_result["success"]:
@@ -171,12 +173,15 @@ class TestChainOrchestrator:
 
         return None
 
-    def _execute_module(self, script_path: str, headed: bool = False) -> Dict[str, Any]:
+    def _execute_module(
+        self, script_path: str, headed: bool = False, no_heal: bool = False
+    ) -> Dict[str, Any]:
         """执行单个模块的测试脚本
 
         Args:
             script_path: 脚本路径
             headed: 是否有头模式
+            no_heal: 是否禁用自愈
 
         Returns:
             dict: 执行结果
@@ -188,6 +193,14 @@ class TestChainOrchestrator:
         ]
         if not headed:
             cmd.append("--headless")
+
+        # 自愈参数：默认启用 SMART 策略 + 源码回写
+        if not no_heal:
+            cmd.extend([
+                "--ph-strategy=SMART",
+                "--ph-auto-patch-source",
+                "--ph-ai-patch-source",
+            ])
 
         try:
             result = subprocess.run(
