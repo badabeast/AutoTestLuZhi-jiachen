@@ -304,7 +304,7 @@ def main():
                 print(f"\n  {icon} [{entry.test_name}]")
                 print(f"     细分类: {entry.sub_category.value}")
                 print(f"     策略: {decision.strategy.value} ({decision.priority.name})")
-                print(f"     置信度: {decision.confidence:.0%}")
+                print(f"     评估分数: {decision.score:.0%}")
                 print(f"     理由: {decision.reasoning}")
                 if decision.fallback_chain:
                     print(f"     回退链: {' → '.join(s.value for s in decision.fallback_chain)}")
