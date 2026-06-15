@@ -1,0 +1,16 @@
+report:
+  title: "智能测试自动化 — 测试报告"
+  theme: "light"
+  lang: "zh"
+
+history:
+  enabled: true
+  max_entries: 30
+
+output:
+  dir: "./reports"
+  filename: "report.html"
+
+environment:
+  project: "smart-test-automation"
+  team: "QA"

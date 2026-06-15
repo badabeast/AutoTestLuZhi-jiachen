@@ -1,0 +1,14 @@
+<component name="libraryTable">
+  <library name="audit_demand_reject">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/output/modules/audit_demand_reject/trace_20260609_104550.zip!/" />
+      <root url="jar://$PROJECT_DIR$/output/modules/audit_demand_reject/trace_20260609_102340.zip!/" />
+      <root url="jar://$PROJECT_DIR$/output/modules/audit_demand_reject/trace_20260609_110306.zip!/" />
+      <root url="jar://$PROJECT_DIR$/output/modules/audit_demand_reject/trace.zip!/" />
+      <root url="jar://$PROJECT_DIR$/output/modules/audit_demand_reject/trace_20260609_102335.zip!/" />
+      <root url="jar://$PROJECT_DIR$/output/modules/audit_demand_reject/trace_20260609_105348.zip!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

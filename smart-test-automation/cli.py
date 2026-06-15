@@ -71,6 +71,13 @@ def main():
     heal_parser.add_argument("module_name", help="模块名称")
     heal_parser.add_argument("--headed", action="store_true", help="有头模式")
 
+    # ── repair（回退优先级策略层）──
+    repair_parser = subparsers.add_parser("repair", help="回退优先级策略层 — 智能分析失败并选择修复策略")
+    repair_parser.add_argument("--report", default="output/heal_report.json",
+                               help="heal_report.json 路径（默认 output/heal_report.json）")
+    repair_parser.add_argument("--dry-run", action="store_true",
+                               help="仅分析决策，不执行修复")
+
     # ── report ──
     report_parser = subparsers.add_parser("report", help="查看断言报告")
     report_parser.add_argument("--module", default="", help="指定模块名筛选")
@@ -260,6 +267,55 @@ def main():
 
         import subprocess
         subprocess.run(cmd)
+
+    # ── repair（回退优先级策略层）──
+    elif args.command == "repair":
+        from orchestrator.strategy import FailureRepairOrchestrator, FailureEntry, StrategyDecisionEngine
+
+        report_path = args.report
+        if not os.path.exists(report_path):
+            print(f"⚠️ 报告文件不存在: {report_path}")
+            print(f"   请先运行测试生成失败报告，或指定 --report 路径")
+            sys.exit(1)
+
+        if args.dry_run:
+            # 仅分析，不执行修复
+            with open(report_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            failures = data.get("failures", [])
+            if not failures:
+                print("✅ 无失败记录")
+                sys.exit(0)
+
+            engine = StrategyDecisionEngine()
+            entries = [FailureEntry.from_dict(f) for f in failures]
+            pairs = engine.decide_batch(entries)
+
+            print(f"\n{'='*60}")
+            print(f"🧠 策略分析（Dry Run）— {len(entries)} 个失败")
+            print(f"{'='*60}")
+
+            for entry, decision in pairs:
+                icon = {
+                    "patch_script": "🔧", "replay_verify": "🔄",
+                    "re_record": "🎬", "env_fix": "🌐", "skip": "⏭️",
+                }.get(decision.strategy.value, "❓")
+                print(f"\n  {icon} [{entry.test_name}]")
+                print(f"     细分类: {entry.sub_category.value}")
+                print(f"     策略: {decision.strategy.value} ({decision.priority.name})")
+                print(f"     置信度: {decision.confidence:.0%}")
+                print(f"     理由: {decision.reasoning}")
+                if decision.fallback_chain:
+                    print(f"     回退链: {' → '.join(s.value for s in decision.fallback_chain)}")
+
+            print(f"\n{'='*60}")
+            summary = engine.get_decision_summary()
+            print(f"📊 汇总: {summary.get('by_strategy', {})}")
+        else:
+            # 完整执行
+            orchestrator = FailureRepairOrchestrator(project_root)
+            orchestrator.run(report_path)
 
     # ── report ──
     elif args.command == "report":

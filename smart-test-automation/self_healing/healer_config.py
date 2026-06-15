@@ -18,11 +18,6 @@ from typing import Optional
 from playwright_healer.config import HealerConfig, HealingStrategy
 from playwright_healer.ai_providers import AIProviderConfig, AIProvider
 
-# AI 平台配置（默认值为通用示例地址，实际值从环境变量读取）
-DEFAULT_API_URL = os.environ.get("ZCY_HEALER_API_URL", "https://your-ai-platform.example.com/api/v1/messages")
-DEFAULT_MODEL = os.environ.get("ZCY_HEALER_MODEL", "glm-5.1")
-
-
 def load_env(env_path: Optional[str] = None) -> None:
     """手动加载 .env 文件到环境变量
 
@@ -64,8 +59,8 @@ def get_healer_config(
     load_env()
 
     ai_key = os.environ.get("ANTHROPIC_AUTH_TOKEN", "")
-    api_url = DEFAULT_API_URL
-    model = DEFAULT_MODEL
+    api_url = os.environ.get("ZCY_HEALER_API_URL", "https://your-ai-platform.example.com/api/v1/messages")
+    model = os.environ.get("ZCY_HEALER_MODEL", "glm-5.1")
 
     if not ai_key:
         print("⚠️ ANTHROPIC_AUTH_TOKEN 未设置，healer AI 修复（L4）将不可用")
@@ -102,8 +97,8 @@ def get_healer_env_vars() -> dict:
 
     env = {
         "ANTHROPIC_AUTH_TOKEN": os.environ.get("ANTHROPIC_AUTH_TOKEN", ""),
-        "ZCY_HEALER_API_URL": os.environ.get("ZCY_HEALER_API_URL", DEFAULT_API_URL),
-        "ZCY_HEALER_MODEL": os.environ.get("ZCY_HEALER_MODEL", DEFAULT_MODEL),
+        "ZCY_HEALER_API_URL": os.environ.get("ZCY_HEALER_API_URL", "https://your-ai-platform.example.com/api/v1/messages"),
+        "ZCY_HEALER_MODEL": os.environ.get("ZCY_HEALER_MODEL", "glm-5.1"),
         "PH_STRATEGY": os.environ.get("PH_STRATEGY", "SMART"),
         "PH_PREFER_ARIA": os.environ.get("PH_PREFER_ARIA", "true"),
         "PH_AUTO_PATCH_SOURCE": os.environ.get("PH_AUTO_PATCH_SOURCE", "true"),

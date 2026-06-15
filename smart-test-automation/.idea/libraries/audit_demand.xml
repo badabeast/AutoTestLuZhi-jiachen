@@ -1,0 +1,10 @@
+<component name="libraryTable">
+  <library name="audit_demand">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/output/modules/audit_demand/trace.zip!/" />
+      <root url="jar://$PROJECT_DIR$/output/modules/audit_demand/trace_20260609_100738.zip!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

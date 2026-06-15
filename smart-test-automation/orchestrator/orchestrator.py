@@ -191,8 +191,8 @@ class TestChainOrchestrator:
             script_path,
             "-x", "-v",
         ]
-        if not headed:
-            cmd.append("--headless")
+        if headed:
+            cmd.append("--headed")
 
         # 自愈参数：默认启用 SMART 策略 + 源码回写
         if not no_heal:

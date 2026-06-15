@@ -7,10 +7,15 @@ playwright-healer 自愈配置:
   - 本文件仅负责: 浏览器上下文配置、登录守卫、测试报告 Hooks
   - 自愈参数通过 pytest.ini 的 addopts 或命令行 --ph-* 传入
   - LocatorActionError 自动采集并写入 JSON 报告供 heal_runner 使用
+
+登录态管理:
+  - browser_context_args: 加载 storage_state 并清洗 expires=-1 cookie
+  - login_state_health_check: session 级 fixture，测试前验证登录态有效性
 """
 
 import json
 import os
+import time
 import traceback
 
 import pytest
@@ -26,44 +31,178 @@ from core.locator_error import LocatorActionError
 # ── 自愈错误报告文件路径 ──────────────────────────────────
 HEAL_REPORT_PATH = os.path.join(os.path.dirname(__file__), "output", "heal_report.json")
 
+
+# ── LiteReport 截图辅助函数 ─────────────────────────────────
+
+def screenshot(page, request, label=""):
+    """捕获一步截图并附加到 LiteReport 报告
+
+    用法（在测试用例中）:
+        from conftest import screenshot
+        screenshot(page, request, "1. 打开首页")
+    """
+    import base64
+    try:
+        b64 = base64.b64encode(page.screenshot(full_page=True)).decode("utf-8")
+        data_uri = f"data:image/png;base64,{b64}"
+        request.node.user_properties.append(
+            ("screenshot", {"label": label, "data": data_uri})
+        )
+    except Exception as e:
+        print(f"\n[SCREENSHOT] 截图失败: {e}")
+
 # ── healer 自愈配置 ──────────────────────────────────────────
 
 @pytest.fixture(scope="session")
 def healing_config():
-    """healer 配置：直接从 .env 已有变量名读取"""
-    from playwright_healer.config import HealerConfig, HealingStrategy
-    from playwright_healer.ai_providers import AIProviderConfig, AIProvider
+    """healer 配置：复用 self_healing/healer_config.py 的统一配置"""
+    from self_healing.healer_config import get_healer_config
+    return get_healer_config()
 
-    return HealerConfig(
-        providers=[
-            AIProviderConfig(
-                provider=AIProvider.ANTHROPIC,
-                api_key=os.environ.get("ANTHROPIC_AUTH_TOKEN", ""),
-                model=os.environ.get("ZCY_HEALER_MODEL", "glm-5.1"),
-                api_url=os.environ.get("ZCY_HEALER_API_URL", ""),
-            )
-        ],
-        strategy=HealingStrategy(os.environ.get("PH_STRATEGY", "SMART")),
-        prefer_aria=os.environ.get("PH_PREFER_ARIA", "true").lower() == "true",
-        auto_patch_source=os.environ.get("PH_AUTO_PATCH_SOURCE", "true").lower() == "true",
-        patch_source_backup=os.environ.get("PH_PATCH_SOURCE_BACKUP", "true").lower() == "true",
-    )
+
+# ── 登录态 Cookie 清洗工具 ──────────────────────────────────
+
+def _sanitize_storage_state(storage_state_path: str) -> str | None:
+    """加载 storage_state.json，清洗 expires=-1 的 session cookie 后写回。
+
+    Playwright 在新浏览器 context 中会忽略 expires=-1 的 cookie，
+    导致关键的 SESSION/SSOSESSION 等认证 cookie 丢失。
+    修复策略：将 expires=-1 改为 7 天后的 Unix 时间戳。
+
+    Args:
+        storage_state_path: storage_state.json 文件路径
+
+    Returns:
+        清洗后的文件路径（如果无修改则返回原路径），文件不存在返回 None
+    """
+    if not os.path.exists(storage_state_path):
+        return None
+
+    try:
+        with open(storage_state_path, "r", encoding="utf-8") as f:
+            state = json.load(f)
+    except Exception as e:
+        print(f"\n[LOGIN] 读取 storage_state 失败: {e}")
+        return None
+
+    cookies = state.get("cookies", [])
+    if not cookies:
+        return storage_state_path
+
+    # 修复 expires=-1 的 session cookie
+    seven_days_later = time.time() + 7 * 24 * 3600
+    fixed_count = 0
+    for cookie in cookies:
+        if cookie.get("expires", 0) == -1:
+            cookie["expires"] = seven_days_later
+            fixed_count += 1
+            print(f"[LOGIN] 修复 session cookie: {cookie['name']} (expires=-1 -> 7d)")
+
+    # 检查关键认证 cookie 是否存在且未过期
+    now = time.time()
+    expired_keys = []
+    for cookie in cookies:
+        expires = cookie.get("expires", 0)
+        if 0 < expires < now:
+            expired_keys.append(cookie["name"])
+
+    if expired_keys:
+        print(f"[LOGIN] 以下 cookie 已过期: {expired_keys}")
+
+    # 有修复则写回文件
+    if fixed_count > 0:
+        try:
+            with open(storage_state_path, "w", encoding="utf-8") as f:
+                json.dump(state, f, ensure_ascii=False, indent=2)
+            print(f"[LOGIN] 已修复 {fixed_count} 个 session cookie 并写回 storage_state")
+        except Exception as e:
+            print(f"[LOGIN] 写回 storage_state 失败: {e}")
+
+    return storage_state_path
 
 
 # ── 浏览器上下文配置 ────────────────────────────────────────
 
 @pytest.fixture(scope="session")
 def browser_context_args(browser_context_args, playwright):
-    """全局浏览器上下文配置：带登录态、忽略 HTTPS、允许本地网络"""
+    """全局浏览器上下文配置：带登录态、忽略 HTTPS、允许本地网络
+
+    关键修复：加载 storage_state 前先清洗 expires=-1 的 cookie，
+    避免 Playwright 在新 context 中忽略 session cookie 导致登录态丢失。
+    """
     args = {
         "ignore_https_errors": True,
         "viewport": {"width": 1366, "height": 768},
         "permissions": ["local-network-access"],
     }
     storage_state = "login_state/storage_state.json"
-    if os.path.exists(storage_state):
-        args["storage_state"] = storage_state
+    sanitized_path = _sanitize_storage_state(storage_state)
+    if sanitized_path:
+        args["storage_state"] = sanitized_path
+    else:
+        print(f"\n[LOGIN] 未找到有效的 storage_state: {storage_state}")
+        print("[LOGIN] 测试将依赖 BasePage._check_and_handle_login 自动登录")
     return args
+
+
+# ── 登录态健康检查 ──────────────────────────────────────────
+
+@pytest.fixture(scope="session")
+def login_state_health_check(browser_context_args):
+    """Session 级登录态健康检查：在首个使用该 fixture 的测试前运行。
+
+    检查逻辑:
+    1. 如果 storage_state.json 不存在，打印警告（后续由 auto_login 处理）
+    2. 检查关键 cookie（SESSION, SSOSESSION）是否过期
+    3. 过期则打印预警，但不阻塞测试（由 _check_and_handle_login 兜底）
+    """
+    storage_state_path = "login_state/storage_state.json"
+    if not os.path.exists(storage_state_path):
+        print("\n[LOGIN-HEALTH] storage_state.json 不存在，测试将依赖自动登录")
+        return {"status": "missing", "cookies": []}
+
+    try:
+        with open(storage_state_path, "r", encoding="utf-8") as f:
+            state = json.load(f)
+    except Exception as e:
+        print(f"\n[LOGIN-HEALTH] 读取 storage_state 失败: {e}")
+        return {"status": "error", "cookies": []}
+
+    cookies = state.get("cookies", [])
+    now = time.time()
+
+    # 关键认证 cookie
+    auth_cookie_names = ["SESSION", "SSOSESSION"]
+    auth_status = {}
+
+    for cookie in cookies:
+        name = cookie.get("name", "")
+        if name in auth_cookie_names:
+            expires = cookie.get("expires", -1)
+            if expires == -1:
+                auth_status[name] = "session_only"
+            elif 0 < expires < now:
+                auth_status[name] = "expired"
+            else:
+                remaining_hours = (expires - now) / 3600
+                auth_status[name] = f"valid ({remaining_hours:.1f}h remaining)"
+
+    # 输出健康检查结果
+    print(f"\n{'='*50}")
+    print("[LOGIN-HEALTH] 登录态健康检查")
+    print(f"  存储文件: {storage_state_path}")
+    print(f"  Cookie 总数: {len(cookies)}")
+    for name, status in auth_status.items():
+        icon = "OK" if "valid" in status else ("WARN" if status == "session_only" else "EXPIRED")
+        print(f"  [{icon}] {name}: {status}")
+    print(f"{'='*50}")
+
+    has_expired = any(v == "expired" for v in auth_status.values())
+    if has_expired:
+        print("[LOGIN-HEALTH] WARNING: 检测到过期认证 cookie，测试可能遇到登录态问题")
+        print("[LOGIN-HEALTH] 建议运行: cd smart-test-automation && python3 login/auto_login.py")
+
+    return {"status": "expired" if has_expired else "ok", "auth_status": auth_status}
 
 
 # ── 测试报告 Hooks ──────────────────────────────────────────
@@ -97,32 +236,21 @@ def pytest_runtest_makereport(item, call):
             except Exception:
                 screenshot_path = ""
 
-            # 附加到 HTML 报告
+            # 附加到 LiteReport（通过 user_properties → 报告截图树）
             try:
-                report.extra = getattr(report, "extra", [])
                 with open(screenshot_path, "rb") as f:
-                    html = (
-                        '<div><img src="data:image/png;base64,'
-                        f'{base64.b64encode(f.read()).decode()}'
-                        '" style="max-width:100%"/></div>'
-                    )
-                report.extra.append(pytest.html.extras.html(html))
-            except Exception:
-                pass
-
-            # 附加到 Allure 报告
-            try:
-                import allure
-                allure.attach.file(
-                    screenshot_path,
-                    name="失败截图",
-                    attachment_type=allure.attachment_type.PNG,
+                    b64 = base64.b64encode(f.read()).decode("utf-8")
+                data_uri = f"data:image/png;base64,{b64}"
+                item.user_properties.append(
+                    ("screenshot", {"label": "[Auto] 失败截图", "data": data_uri})
                 )
             except Exception:
                 pass
 
         # ── 采集 LocatorActionError 写入 JSON 报告 ──
-        _collect_locator_errors(item, call, report, screenshot_path)
+        # 策略层子进程里不写报告，避免和外层进程争抢文件
+        if not os.environ.get("STRATEGY_REPAIR_RUNNING"):
+            _collect_locator_errors(item, call, report, screenshot_path)
 
 
 def _collect_locator_errors(item, call, report, screenshot_path: str):
@@ -174,11 +302,12 @@ def _collect_locator_errors(item, call, report, screenshot_path: str):
         # 再检查异常链中是否有定位错误关键词
         tb_text = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
         if any(kw in tb_text for kw in ["waiting for locator", "waiting for selector",
-                                          "Locator.wait_for", "Timeout.*locator",
+                                          "Locator.wait_for", "Timeout waiting for locator",
                                           "strict mode violation"]):
             category = "locator"
         elif any(kw in tb_text for kw in ["ERR_NAME_NOT_RESOLVED", "ERR_CONNECTION_REFUSED",
-                                            "Navigation Timeout", "browser closed"]):
+                                            "Navigation Timeout", "browser has been closed",
+                                            "Browser closed"]):
             category = "env"
         else:
             category = "unknown"
@@ -214,7 +343,8 @@ def _is_env_error(exc) -> bool:
     env_keywords = [
         "ERR_NAME_NOT_RESOLVED", "ERR_CONNECTION_REFUSED",
         "ERR_CONNECTION_TIMED_OUT", "Navigation Timeout",
-        "browser closed", "ERR_SSL", "ERR_TUNNEL",
+        "browser has been closed", "Browser closed",
+        "ERR_SSL", "ERR_TUNNEL",
     ]
     return any(kw in msg for kw in env_keywords)
 
@@ -274,14 +404,24 @@ def _append_heal_report(entry: dict):
 # ── 自动自愈触发 ──────────────────────────────────────────────
 
 def pytest_sessionfinish(session, exitstatus):
-    """测试 session 结束后：如果有定位错误，自动触发自愈修复流程
+    """测试 session 结束后：使用回退优先级策略层处理所有失败类型
 
     流程：
       1. 读取 output/heal_report.json
-      2. 检查是否有 category=locator 的失败
-      3. 如果有 → 调用 healer pipeline 修复选择器 → 回写源码
-      4. 打印修复结果
+      2. 对每个失败条目进行细粒度分类（locator/assertion/env/flow）
+      3. 决策引擎选择最优修复策略（patch/replay/re-record/env_fix/skip）
+      4. 按优先级执行修复，失败时自动降级到回退链
+      5. 生成修复报告
+
+    兼容：如果策略层导入失败，回退到旧的仅 locator 自愈逻辑
+
+    防递归：策略层的 replay/retry 会启动子进程 pytest，
+    子进程也会触发这个 hook，用环境变量阻止递归。
     """
+    # 防递归：策略层子进程里不再触发策略层
+    if os.environ.get("STRATEGY_REPAIR_RUNNING"):
+        return
+
     if not os.path.exists(HEAL_REPORT_PATH):
         return
 
@@ -291,15 +431,40 @@ def pytest_sessionfinish(session, exitstatus):
     except Exception:
         return
 
-    locator_failures = [e for e in report.get("failures", []) if e.get("category") == "locator"]
-    if not locator_failures:
+    all_failures = report.get("failures", [])
+    if not all_failures:
         return
 
-    print(f"\n{'='*60}")
-    print(f"🩹 检测到 {len(locator_failures)} 个定位错误，自动触发自愈")
-    print(f"{'='*60}")
+    # 尝试使用新的策略层
+    try:
+        from orchestrator.strategy import FailureRepairOrchestrator
+        project_root = os.path.dirname(__file__)
+        orchestrator = FailureRepairOrchestrator(project_root)
+        orchestrator.run(HEAL_REPORT_PATH)
+    except ImportError:
+        # 策略层不可用，回退到旧逻辑（仅处理 locator）
+        print(f"\n⚠️ 策略层未就绪，使用旧版自愈逻辑")
+        locator_failures = [e for e in all_failures if e.get("category") == "locator"]
+        if locator_failures:
+            _auto_heal(locator_failures)
+    except Exception as e:
+        print(f"\n⚠️ 策略层执行异常: {e}")
+        print(f"   回退到旧版自愈逻辑")
+        locator_failures = [e for e in all_failures if e.get("category") == "locator"]
+        if locator_failures:
+            _auto_heal(locator_failures)
 
-    _auto_heal(locator_failures)
+    # 归档报告文件（不删除，保留供 repair 命令重跑）
+    try:
+        import shutil
+        archive_dir = os.path.join(os.path.dirname(HEAL_REPORT_PATH), "archive")
+        os.makedirs(archive_dir, exist_ok=True)
+        ts = time.strftime("%Y%m%d_%H%M%S")
+        archive_path = os.path.join(archive_dir, f"heal_report_{ts}.json")
+        shutil.move(HEAL_REPORT_PATH, archive_path)
+        print(f"📦 报告已归档: {archive_path}")
+    except Exception:
+        pass
 
 
 def _auto_heal(failures: list):
@@ -352,29 +517,9 @@ def _call_healer(selector: str, page_url: str) -> str | None:
 
     async def _heal():
         from playwright.async_api import async_playwright
+        from self_healing.healer_config import get_healer_config
 
-        # healer 配置
-        from playwright_healer.config import HealerConfig, HealingStrategy
-        from playwright_healer.ai_providers import AIProviderConfig, AIProvider
-
-        ai_key = os.environ.get("ANTHROPIC_AUTH_TOKEN", "")
-        api_url = os.environ.get("ZCY_HEALER_API_URL", "")
-        model = os.environ.get("ZCY_HEALER_MODEL", "glm-5.1")
-
-        config = HealerConfig(
-            providers=[
-                AIProviderConfig(
-                    provider=AIProvider.ANTHROPIC,
-                    api_key=ai_key,
-                    model=model,
-                    api_url=api_url,
-                )
-            ] if ai_key else [],
-            strategy=HealingStrategy(os.environ.get("PH_STRATEGY", "SMART")),
-            prefer_aria=os.environ.get("PH_PREFER_ARIA", "true").lower() == "true",
-            auto_patch_source=True,
-            patch_source_backup=True,
-        )
+        config = get_healer_config()
 
         from playwright.async_api import async_playwright
         from playwright_healer.pipeline import HealingPipeline
@@ -414,7 +559,7 @@ def _call_healer(selector: str, page_url: str) -> str | None:
                 # 从 session_report 获取修复后的选择器
                 healed_selector = None
                 for event in pipeline.session_report.events:
-                    if event.original_selector == selector and event.healed_selector:
+                    if event.selector == selector and event.healed_selector:
                         healed_selector = event.healed_selector
                         break
 

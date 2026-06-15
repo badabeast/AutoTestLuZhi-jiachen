@@ -1,0 +1,22 @@
+[
+  {
+    "timestamp": "2026-06-11 16:20:09",
+    "filename": "history/report_20260611_162009.html",
+    "json_file": "history/report_20260611_162009.json",
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "skipped": 0,
+    "duration": 63.78609490394592
+  },
+  {
+    "timestamp": "2026-06-11 16:10:13",
+    "filename": "history/report_20260611_161013.html",
+    "json_file": "history/report_20260611_161013.json",
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "skipped": 0,
+    "duration": 60.01583003997803
+  }
+]
