@@ -437,10 +437,10 @@ def pytest_sessionfinish(session, exitstatus):
 
     # 尝试使用新的策略层
     try:
-        from orchestrator.strategy import FailureRepairOrchestrator
+        from scheduler.strategy import FailureRepairOrchestrator
         project_root = os.path.dirname(__file__)
-        orchestrator = FailureRepairOrchestrator(project_root)
-        orchestrator.run(HEAL_REPORT_PATH)
+        scheduler = FailureRepairOrchestrator(project_root)
+        scheduler.run(HEAL_REPORT_PATH)
     except ImportError:
         # 策略层不可用，回退到旧逻辑（仅处理 locator）
         print(f"\n⚠️ 策略层未就绪，使用旧版自愈逻辑")

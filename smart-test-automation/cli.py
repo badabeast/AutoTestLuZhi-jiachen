@@ -150,7 +150,7 @@ def main():
 
     # ── run ──
     elif args.command == "run":
-        from orchestrator.orchestrator import TestChainOrchestrator
+        from scheduler.orchestrator import TestChainOrchestrator
 
         # 解析 --var key=value
         variables = {}
@@ -178,10 +178,10 @@ def main():
 
     # ── compose（查看编排计划，不执行）──
     elif args.command == "compose":
-        from orchestrator.graph import TestChainGraph
-        from orchestrator.composer import ExecutionPlanComposer
+        from scheduler.graph import TestChainGraph
+        from scheduler.composer import ExecutionPlanComposer
         from knowledge import load_module_definition, list_modules, load_dependency_graph
-        from orchestrator.module_definition import ModuleDefinition
+        from scheduler.module_definition import ModuleDefinition
 
         graph = TestChainGraph()
 
@@ -270,7 +270,7 @@ def main():
 
     # ── repair（回退优先级策略层）──
     elif args.command == "repair":
-        from orchestrator.strategy import FailureRepairOrchestrator, FailureEntry, StrategyDecisionEngine
+        from scheduler.strategy import FailureRepairOrchestrator, FailureEntry, StrategyDecisionEngine
 
         report_path = args.report
         if not os.path.exists(report_path):
@@ -314,8 +314,8 @@ def main():
             print(f"📊 汇总: {summary.get('by_strategy', {})}")
         else:
             # 完整执行
-            orchestrator = FailureRepairOrchestrator(project_root)
-            orchestrator.run(report_path)
+            scheduler = FailureRepairOrchestrator(project_root)
+            scheduler.run(report_path)
 
     # ── report ──
     elif args.command == "report":

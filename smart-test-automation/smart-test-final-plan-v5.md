@@ -589,10 +589,10 @@ Self-healing enabled via playwright-healer (healing_page fixture)
             f.write(source)
 ```
 
-### 8.2 模块编排引擎 (orchestrator/)
+### 8.2 模块编排引擎 (scheduler/)
 
 ```python
-# orchestrator/graph.py
+# scheduler/graph.py
 
 from dataclasses import dataclass, field
 from typing import Dict, List, Set, Optional
@@ -672,7 +672,7 @@ class DependencyGraph:
 ```
 
 ```python
-# orchestrator/composer.py
+# scheduler/composer.py
 
 class Composer:
     """执行计划编排器
@@ -834,7 +834,7 @@ smart-test-automation/
 │   ├── recording_wrapper.py          # 两步录制编排器
 │   └── script_transformer.py         # raw_script → healer 兼容转换
 │
-├── orchestrator/                     # 新建 — 模块编排引擎
+├── scheduler/                      # 新建 — 模块编排引擎
 │   ├── __init__.py
 │   ├── module_definition.py          # 模块定义数据模型
 │   ├── graph.py                      # 依赖图引擎

@@ -242,7 +242,7 @@ def test_create_demand(page: Page):
     save_module_definition("confirm_demand_demo", confirm_def)
 
     # AI 推断
-    from orchestrator.smart_inference import CrossModuleInferencer
+    from scheduler.smart_inference import CrossModuleInferencer
     inferencer = CrossModuleInferencer()
     deps = inferencer.infer_all()
     print(f"  ✅ AI 推断完成: 发现 {len(deps)} 条依赖关系")
@@ -258,11 +258,11 @@ def test_create_demand(page: Page):
     # ============================================================
     demo_step("依赖图构建（拓扑排序）", 5)
 
-    from orchestrator.graph import DependencyGraph
+    from scheduler.graph import DependencyGraph
     graph = DependencyGraph()
 
     # 从 knowledge 加载模块并构建图
-    from orchestrator.module_definition import ModuleDefinition
+    from scheduler.module_definition import ModuleDefinition
     for mod_name in list_modules():
         mod_data = load_module_definition(mod_name)
         if mod_data:
@@ -288,7 +288,7 @@ def test_create_demand(page: Page):
     # ============================================================
     demo_step("变量传递（VariableResolver）", 6)
 
-    from orchestrator.variable_resolver import VariableResolver
+    from scheduler.variable_resolver import VariableResolver
     resolver = VariableResolver()
 
     # 模拟模块 A 产出变量
@@ -393,7 +393,7 @@ def test_create_demand(page: Page):
     print(f"\n  报告文件: {report_path}")
 
     # 编排报告
-    from orchestrator.composer import Composer
+    from scheduler.composer import Composer
     comp = Composer()
     plan = comp.compose("confirm_demand_demo", graph)
     plan_path = demo_output / "execution_plan.json"
@@ -412,10 +412,10 @@ def test_create_demand(page: Page):
     print(f"    ✅ HAR 解析器（har_parser.py）")
     print(f"    ✅ 脚本转换器（script_transformer.py）")
     print(f"    ✅ 知识库管理（knowledge/）")
-    print(f"    ✅ 依赖图引擎（orchestrator/graph.py）")
-    print(f"    ✅ 执行计划编排（orchestrator/composer.py）")
-    print(f"    ✅ 变量传递解析（orchestrator/variable_resolver.py）")
-    print(f"    ✅ AI 依赖推断（orchestrator/ai_inference.py）")
+    print(f"    ✅ 依赖图引擎（scheduler/graph.py）")
+    print(f"    ✅ 执行计划编排（scheduler/composer.py）")
+    print(f"    ✅ 变量传递解析（scheduler/variable_resolver.py）")
+    print(f"    ✅ AI 依赖推断（scheduler/ai_inference.py）")
     print(f"    ✅ 三层断言引擎（assertion/engine.py）")
     print(f"    ✅ 报告生成")
     print(f"\n  产出目录: {demo_output}/")

@@ -536,7 +536,7 @@ class TwoStepRecorder:
 
         # 4c. 试着让 AI 推断一下依赖关系
         try:
-            from orchestrator.smart_inference import CrossModuleInferencer
+            from scheduler.smart_inference import CrossModuleInferencer
             inferencer = CrossModuleInferencer()
             inferred_deps = inferencer.infer_all()
             for dep in inferred_deps:

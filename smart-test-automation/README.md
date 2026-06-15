@@ -102,7 +102,7 @@ smart-test-automation/
 │   ├── har_parser.py         # HAR JSON 解析
 │   ├── script_transformer.py # 脚本转换 + PO 分层生成
 │   └── guards.py             # 登录守卫 + 弹窗守卫
-├── orchestrator/             # 编排引擎
+├── scheduler/                # 编排引擎
 │   ├── graph.py              # 依赖图 + 拓扑排序
 │   ├── composer.py           # 执行计划编排
 │   ├── orchestrator.py       # 测试链执行引擎
