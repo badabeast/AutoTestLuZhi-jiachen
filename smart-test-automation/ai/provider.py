@@ -195,9 +195,7 @@ class OpenAICompatibleProvider(AIProvider):
 
         print(f"🤖 AI Provider: {self.model_name} ({self.base_url})")
 
-    # ------------------------------------------------------------------
     # AIProvider 接口实现
-    # ------------------------------------------------------------------
 
     def analyze_intent(
         self,
@@ -246,9 +244,7 @@ class OpenAICompatibleProvider(AIProvider):
             print(f"⚠️ 代码生成失败: {e}")
             return self._fallback_test_code(session_name, operations)
 
-    # ------------------------------------------------------------------
     # API 调用（Anthropic Messages 协议）
-    # ------------------------------------------------------------------
 
     def _call_api(self, prompt: str, temperature: float = 0.3) -> str:
         """调用 Anthropic Messages API
@@ -287,9 +283,7 @@ class OpenAICompatibleProvider(AIProvider):
                 return content_blocks[0].get("text", "")
             return str(result)
 
-    # ------------------------------------------------------------------
     # Prompt 构建
-    # ------------------------------------------------------------------
 
     def _build_intent_prompt(
         self,
@@ -356,9 +350,7 @@ class OpenAICompatibleProvider(AIProvider):
         )
         return prompt
 
-    # ------------------------------------------------------------------
     # 解析
-    # ------------------------------------------------------------------
 
     def _parse_intent_response(
         self, response: str, operations: List[UIOperation]
@@ -468,9 +460,7 @@ class OpenAICompatibleProvider(AIProvider):
         return "\n".join(lines)
 
 
-# ---------------------------------------------------------------------------
 # 向后兼容的别名
-# ---------------------------------------------------------------------------
 
 class MinimaxProvider(OpenAICompatibleProvider):
     """MiniMax Provider（向后兼容）"""
@@ -502,9 +492,7 @@ class OpenAIProvider(OpenAICompatibleProvider):
         )
 
 
-# ---------------------------------------------------------------------------
 # 工厂函数
-# ---------------------------------------------------------------------------
 
 def create_ai_provider(
     provider_type: str = DEFAULT_MODEL,

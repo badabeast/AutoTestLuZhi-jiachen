@@ -60,41 +60,41 @@ def main():
     compose_parser.add_argument("target_module", help="目标模块名")
     compose_parser.add_argument("--save", default="", help="保存执行计划到指定路径")
 
-    # ── generate-script ──
+    # generate-script
     gen_parser = subparsers.add_parser("generate-script", help="生成增强脚本（healer 兼容）")
     gen_parser.add_argument("module_name", help="模块名称")
     gen_parser.add_argument("--extract-vars", nargs="*", default=[],
                             help="提取变量列表（name:from_api:from_field）")
 
-    # ── heal ──
+    # heal
     heal_parser = subparsers.add_parser("heal", help="手动触发自愈")
     heal_parser.add_argument("module_name", help="模块名称")
     heal_parser.add_argument("--headed", action="store_true", help="有头模式")
 
-    # ── repair（回退优先级策略层）──
+    # repair（回退优先级策略层）
     repair_parser = subparsers.add_parser("repair", help="回退优先级策略层 — 智能分析失败并选择修复策略")
     repair_parser.add_argument("--report", default="output/heal_report.json",
                                help="heal_report.json 路径（默认 output/heal_report.json）")
     repair_parser.add_argument("--dry-run", action="store_true",
                                help="仅分析决策，不执行修复")
 
-    # ── report ──
+    # report
     report_parser = subparsers.add_parser("report", help="查看断言报告")
     report_parser.add_argument("--module", default="", help="指定模块名筛选")
 
-    # ── query-knowledge ──
+    # query-knowledge
     query_parser = subparsers.add_parser("query-knowledge", help="查询知识库")
     query_parser.add_argument("--module", default="", help="查询指定模块定义")
     query_parser.add_argument("--graph", action="store_true", help="查看依赖图")
     query_parser.add_argument("--frontend", action="store_true", help="查看前端知识文档")
     query_parser.add_argument("--api", default="", help="按 API 路径搜索前端知识")
 
-    # ── list ──
+    # list
     list_parser = subparsers.add_parser("list", help="列出已录制模块")
 
     args = parser.parse_args()
 
-    # ── record ──
+    # record
     if args.command == "record":
         from recorder.recording_wrapper import TwoStepRecorder
 
@@ -131,7 +131,7 @@ def main():
             print("❌ 录制失败")
             sys.exit(1)
 
-    # ── replay ──
+    # replay
     elif args.command == "replay":
         module_dir = Path(f"output/modules/{args.module_name}")
         raw_script = module_dir / "raw_script.py"
@@ -148,7 +148,7 @@ def main():
         if not result or not result.get("har_path"):
             sys.exit(1)
 
-    # ── run ──
+    # run
     elif args.command == "run":
         from scheduler.orchestrator import TestChainOrchestrator
 
@@ -176,7 +176,7 @@ def main():
                 print(f"   失败模块: {', '.join(failed)}")
             sys.exit(1)
 
-    # ── compose（查看编排计划，不执行）──
+    # compose（查看编排计划，不执行）
     elif args.command == "compose":
         from scheduler.graph import TestChainGraph
         from scheduler.composer import ExecutionPlanComposer
@@ -212,7 +212,7 @@ def main():
             )
             print(f"  执行计划已保存: {plan_path}")
 
-    # ── generate-script ──
+    # generate-script
     elif args.command == "generate-script":
         module_dir = Path(f"output/modules/{args.module_name}")
         raw_script = module_dir / "raw_script.py"
@@ -243,7 +243,7 @@ def main():
         )
         print(f"✅ 增强脚本已生成: {enhanced_script}")
 
-    # ── heal ──
+    # heal
     elif args.command == "heal":
         print(f"🩹 手动触发自愈: {args.module_name}")
         script_path = f"output/modules/{args.module_name}/enhanced_script.py"

@@ -261,12 +261,12 @@ class BasePage:
     def __init__(self, healing_page):
         self.page = healing_page
 
-    # --- 导航 ---
+    # 导航
     def goto(self, url: str):
         """跳转到指定 URL"""
         self.page.goto(url)
 
-    # --- 点击 ---
+    # 点击
     def click_by_role(self, role: str, name: str = ""):
         """通过 role 点击元素"""
         locator = self.page.get_by_role(role, name=name)
@@ -280,17 +280,17 @@ class BasePage:
         """通过 CSS 选择器点击元素"""
         self.page.locator(selector).click()
 
-    # --- 填写 ---
+    # 填写
     def fill_by_role(self, role: str, name: str, value: str):
         """通过 role 填写输入框"""
         self.page.get_by_role(role, name=name).fill(value)
 
-    # --- 选择 ---
+    # 选择
     def check_by_label(self, label: str):
         """勾选复选框"""
         self.page.get_by_label(label).check()
 
-    # --- 断言 ---
+    # 断言
     def assert_visible(self, text: str):
         """断言文本可见"""
         expect(self.page.get_by_text(text)).to_be_visible()
@@ -299,7 +299,7 @@ class BasePage:
         """断言 URL 包含指定内容"""
         expect(self.page).to_have_url(re.compile(url_part))
 
-    # --- 等待 ---
+    # 等待
     def wait_for_selector(self, selector: str, timeout: int = 10000):
         """等待选择器出现"""
         self.page.wait_for_selector(selector, timeout=timeout)

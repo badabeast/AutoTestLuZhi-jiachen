@@ -22,12 +22,7 @@ class SmartDependencyInferencer:
     分析 API 请求序列中的数据依赖关系，例如:
     - 前一个接口返回的 ID 被后一个接口使用
     - 请求之间的字段映射关系
-
-    增强模式: 如果 knowledge/frontend_docs/ 中有前端沉淀文档，
-    会自动注入到 AI prompt 中，大幅提升推断准确率。
-
     用法::
-
         analyzer = SmartDependencyInferencer()  # 默认 GLM-5.1
         deps = analyzer.analyze_dependencies(recordings)
     """

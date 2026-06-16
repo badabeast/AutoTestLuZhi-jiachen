@@ -28,11 +28,12 @@ load_env()
 # 导入通用定位错误异常
 from core.locator_error import LocatorActionError
 
-# ── 自愈错误报告文件路径 ──────────────────────────────────
+
+# 自愈错误报告文件路径
 HEAL_REPORT_PATH = os.path.join(os.path.dirname(__file__), "output", "heal_report.json")
 
 
-# ── LiteReport 截图辅助函数 ─────────────────────────────────
+# LiteReport 截图辅助函数
 
 def screenshot(page, request, label=""):
     """捕获一步截图并附加到 LiteReport 报告
@@ -51,7 +52,8 @@ def screenshot(page, request, label=""):
     except Exception as e:
         print(f"\n[SCREENSHOT] 截图失败: {e}")
 
-# ── healer 自愈配置 ──────────────────────────────────────────
+
+# healer 自愈配置
 
 @pytest.fixture(scope="session")
 def healing_config():
@@ -60,7 +62,7 @@ def healing_config():
     return get_healer_config()
 
 
-# ── 登录态 Cookie 清洗工具 ──────────────────────────────────
+# 登录态 Cookie 清洗工具
 
 def _sanitize_storage_state(storage_state_path: str) -> str | None:
     """加载 storage_state.json，清洗 expires=-1 的 session cookie 后写回。
@@ -121,7 +123,7 @@ def _sanitize_storage_state(storage_state_path: str) -> str | None:
     return storage_state_path
 
 
-# ── 浏览器上下文配置 ────────────────────────────────────────
+# 浏览器上下文配置
 
 @pytest.fixture(scope="session")
 def browser_context_args(browser_context_args, playwright):
@@ -145,7 +147,7 @@ def browser_context_args(browser_context_args, playwright):
     return args
 
 
-# ── 登录态健康检查 ──────────────────────────────────────────
+# 登录态健康检查
 
 @pytest.fixture(scope="session")
 def login_state_health_check(browser_context_args):
@@ -205,7 +207,7 @@ def login_state_health_check(browser_context_args):
     return {"status": "expired" if has_expired else "ok", "auth_status": auth_status}
 
 
-# ── 测试报告 Hooks ──────────────────────────────────────────
+# 测试报告 Hooks
 
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_makereport(item, call):

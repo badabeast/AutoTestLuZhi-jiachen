@@ -142,7 +142,7 @@ def _assert_header(target_call, assertion: dict, desc: str) -> AssertionResult:
     )
 
 
-# --- 工具方法 ---
+# 工具方法
 
 def _get_attr(call, key, default=None):
     """兼容 dict 和 dataclass 两种访问方式"""
