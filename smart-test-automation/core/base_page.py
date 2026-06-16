@@ -28,7 +28,7 @@ class BasePage:
     def __init__(self, page):
         self.page = page
 
-    # ── 公用工具方法 ──────────────────────────────────────
+    # 公用工具方法
 
     def get_current_username(self) -> str:
         """从页面右上角获取当前登录用户名称（公用方法）
@@ -51,7 +51,7 @@ class BasePage:
             print(f"   ⚠️ 获取用户名失败: {e}")
         return ""
 
-    # ── 智能等待核心 ─────────────────────────────────────
+    # 智能等待核心
 
     @capture_locator_error(action="wait")
     def _wait_for_element(self, locator, timeout=None):
@@ -165,7 +165,7 @@ class BasePage:
         option.wait_for(state="visible", timeout=self.DROPDOWN_TIMEOUT)
         option.click(timeout=timeout)
 
-    # ── 页面导航 ─────────────────────────────────────────
+    # 页面导航
 
     def goto(self, url: str, wait_element: str = None):
         """跳转到指定 URL，智能等待页面就绪

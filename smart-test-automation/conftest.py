@@ -224,7 +224,7 @@ def pytest_runtest_makereport(item, call):
         if page is None:
             page = item.funcargs.get("page")
 
-        # ── 截图 ──
+        # 截图
         screenshot_path = ""
         if page:
             import base64
@@ -249,7 +249,7 @@ def pytest_runtest_makereport(item, call):
             except Exception:
                 pass
 
-        # ── 采集 LocatorActionError 写入 JSON 报告 ──
+        # 采集 LocatorActionError 写入 JSON 报告
         # 策略层子进程里不写报告，避免和外层进程争抢文件
         if not os.environ.get("STRATEGY_REPAIR_RUNNING"):
             _collect_locator_errors(item, call, report, screenshot_path)
@@ -403,7 +403,7 @@ def _append_heal_report(entry: dict):
         print(f"   selector={entry['selector']!r} action={entry['action']}")
 
 
-# ── 自动自愈触发 ──────────────────────────────────────────────
+# 自动自愈触发
 
 def pytest_sessionfinish(session, exitstatus):
     """测试 session 结束后：使用回退优先级策略层处理所有失败类型

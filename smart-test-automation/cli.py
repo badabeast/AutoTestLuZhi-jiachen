@@ -27,7 +27,7 @@ def main():
     )
     subparsers = parser.add_subparsers(dest="command", help="子命令")
 
-    # ── record ──
+    # record
     record_parser = subparsers.add_parser("record", help="录制业务模块（两步录制法）")
     record_parser.add_argument("module_name", help="模块名称（如 create_demand）")
     record_parser.add_argument("--url", default="", help="目标 URL（默认从配置获取）")
@@ -39,14 +39,14 @@ def main():
     record_parser.add_argument("--headed-step2", action="store_true",
                               help="Step 2 回放使用有头模式")
 
-    # ── replay ──
+    # replay
     replay_parser = subparsers.add_parser("replay", help="重放已有 raw_script 生成 HAR/Trace")
     replay_parser.add_argument("module_name", help="模块名称")
     replay_parser.add_argument("--storage-state", default="login_state/storage_state.json",
                                help="登录态文件路径")
     replay_parser.add_argument("--headed", action="store_true", help="有头模式")
 
-    # ── run ──
+    # run
     run_parser = subparsers.add_parser("run", help="编排+执行测试链")
     run_parser.add_argument("target_module", help="目标模块名（如 confirm_demand）")
     run_parser.add_argument("--headed", action="store_true", help="有头模式执行")
@@ -55,7 +55,7 @@ def main():
     run_parser.add_argument("--var", action="append", default=[],
                             help="注入变量 key=value（可多次使用）")
 
-    # ── compose（查看编排计划，不执行）──
+    # compose（查看编排计划，不执行）
     compose_parser = subparsers.add_parser("compose", help="查看编排计划（不执行）")
     compose_parser.add_argument("target_module", help="目标模块名")
     compose_parser.add_argument("--save", default="", help="保存执行计划到指定路径")
@@ -268,7 +268,7 @@ def main():
         import subprocess
         subprocess.run(cmd)
 
-    # ── repair（回退优先级策略层）──
+    # repair（回退优先级策略层）
     elif args.command == "repair":
         from scheduler.strategy import FailureRepairOrchestrator, FailureEntry, StrategyDecisionEngine
 
@@ -317,7 +317,7 @@ def main():
             scheduler = FailureRepairOrchestrator(project_root)
             scheduler.run(report_path)
 
-    # ── report ──
+    # report
     elif args.command == "report":
         report_candidates = []
         output_base = Path("output/modules")
@@ -359,7 +359,7 @@ def main():
             except Exception as e:
                 print(f"   ⚠️ 读取失败: {e}")
 
-    # ── query-knowledge ──
+    # query-knowledge
     elif args.command == "query-knowledge":
         from knowledge import load_module_definition, list_modules, load_dependency_graph
 
@@ -422,7 +422,7 @@ def main():
                     api_count = len(mod_def.get("api_calls", [])) if mod_def else 0
                     print(f"   - {mod_name} ({ops_count} UI操作, {api_count} API)")
 
-    # ── list ──
+    # list
     elif args.command == "list":
         from knowledge import list_modules, load_module_definition
 
