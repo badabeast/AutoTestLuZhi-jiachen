@@ -23,7 +23,7 @@ import time
 import argparse
 from pathlib import Path
 
-sys.path.insert(0, os.path.dirname(__file__))
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 # 加载 .env
 from config.env_loader import load_env
@@ -41,7 +41,8 @@ def save_login_state(url: str, account: str = "", password: str = ""):
     print("🔐 登录态保存工具")
     print("=" * 60)
     print()
-    print(f"📌 登录页: {url}")
+    # print(f"📌 登录页: {url}")
+    print(f"📌 登录页已打开: 请进行登录")
     print(f"📁 保存位置: {STORAGE_STATE_PATH}")
     print()
 
@@ -115,7 +116,7 @@ def save_login_state(url: str, account: str = "", password: str = ""):
             for cookie in state.get("cookies", []):
                 if cookie.get("expires", 0) == -1:
                     cookie["expires"] = seven_days_later
-                    print(f"   🔄 修复 session cookie: {cookie['name']} → expires=7d")
+                  #  print(f"   🔄 修复 session cookie: {cookie['name']} → expires=7d")
 
             STORAGE_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
             with open(STORAGE_STATE_PATH, "w", encoding="utf-8") as f:

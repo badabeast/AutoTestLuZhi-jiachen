@@ -39,8 +39,8 @@ def do_login(page) -> bool:
             print("   🔐 使用录制登录操作...")
             try:
                 exec(login_code, {"page": page})
-                # 等待页面离开登录状态，最多30秒
-                page.wait_for_load_state("networkidle", timeout=30000)
+                # 等待页面离开登录状态，最多15秒
+                page.wait_for_load_state("domcontentloaded", timeout=15000)
                 if not _is_on_login_page(page):
                     print(f"   ✅ 登录成功, URL: {page.url[:80]}")
                     return True
@@ -77,7 +77,7 @@ def do_login(page) -> bool:
         if login_btn.count() > 0:
             login_btn.first.click()
         # 等待页面导航完成（登录后跳转）
-        page.wait_for_load_state("networkidle", timeout=30000)
+        page.wait_for_load_state("domcontentloaded", timeout=15000)
         if not _is_on_login_page(page):
             print(f"   ✅ 登录成功, URL: {page.url[:80]}")
             return True
@@ -102,8 +102,8 @@ def ensure_logged_in(page, target_url: str = None):
     print(f"   🔒 检测到登录页，触发自动登录恢复")
     if do_login(page):
         if target_url and "login" not in target_url.lower():
-            page.goto(target_url, timeout=60000)
-            page.wait_for_load_state("networkidle", timeout=30000)
+            page.goto(target_url, timeout=30000)
+            page.wait_for_load_state("domcontentloaded", timeout=15000)
     else:
         print("   ❌ 自动登录失败")
 
@@ -241,13 +241,13 @@ def safe_fill(page, locator, value: str, timeout: int = 10000, max_retries: int 
 # 页面就绪等待（组合守卫）
 # ============================================================
 
-def wait_for_page_ready(page, timeout: int = 30000):
+def wait_for_page_ready(page, timeout: int = 15000):
     """等待页面加载 + 登录守卫（goto 后调用）
 
     不做弹窗处理 — 弹窗只在操作失败时才处理。
     """
     try:
-        page.wait_for_load_state("networkidle", timeout=timeout)
+        page.wait_for_load_state("domcontentloaded", timeout=timeout)
     except Exception:
         pass
     ensure_logged_in(page, page.url)

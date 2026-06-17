@@ -36,6 +36,7 @@ class LocatorActionError(Exception):
         self.page_url = page_url
         self.original_error = original_error
         self.description = description
+        self.strict_violation_message: str = ""  # L0: Playwright strict violation 原始错误文本
         msg = (
             f"[{action}] selector={selector!r} "
             f"url={page_url!r}"

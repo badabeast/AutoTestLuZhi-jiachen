@@ -1,0 +1,28 @@
+{
+  "name": "element_ui",
+  "display_name": "Element Plus / Element UI",
+  "version": "2.x/3.x",
+  "detect_patterns": [
+    {"type": "class_prefix", "value": "el-", "weight": 1.0, "description": "Element UI CSS class 前缀"}
+  ],
+  "locator_priorities": [
+    "data-testid",
+    "aria-label",
+    "role+name",
+    "el_component_role",
+    "css_stable",
+    "text"
+  ],
+  "attribute_mappings": [],
+  "stable_class_regex": [
+    "el-button(-[a-z]+)*",
+    "el-input(-[a-z]+)*",
+    "el-select(-[a-z]+)*",
+    "el-form-item(-[a-z]+)*",
+    "el-table(-[a-z]+)*"
+  ],
+  "ignore_class_regex": [],
+  "shadow_dom": false,
+  "nested_structure": "standard",
+  "confidence_modifier": 1.0
+}

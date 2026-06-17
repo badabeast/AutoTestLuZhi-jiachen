@@ -61,6 +61,7 @@ class HealingScriptTransformer:
         source = re.sub(r'\s*page\s*=\s*context\.new_page\(\).*\n?', '', source)
 
         # 5. 处理 import 行：移除 Page 类型，保留其他 import
+        #    因为 HealingPage 使用 async Page，需要将 sync_api 改为 async_api
         def _fix_import_line(match):
             """处理 from playwright.sync_api import ... 这行"""
             full_line = match.group(0)
@@ -75,7 +76,8 @@ class HealingScriptTransformer:
             items = [i for i in items if i and i != 'Page']
             if not items:
                 return ''
-            return f'from playwright.sync_api import {", ".join(items)}\n'
+            # 使用 async_api 替代 sync_api（HealingPage 使用 async Page）
+            return f'from playwright.async_api import {", ".join(items)}\n'
 
         source = re.sub(
             r'from\s+playwright\.sync_api\s+import\s+.*?Page.*?\n',
@@ -129,12 +131,13 @@ Run with:
         source = re.sub(r'^""".*?"""', '', source, count=1, flags=re.DOTALL)
         source = header + source.strip() + '\n'
 
-        # 7b. 在 import 区域后插入 datetime import
+        # 7b. 在 import 区域后插入 datetime import + 断言引擎 import + os import
         # 找到最后一个 import 行，在其后插入
+        assertion_imports = "import os\nimport pytest\nimport pytest_asyncio\nfrom assertion.engine import ThreeLayerAssertionEngine\nfrom assertion.assertion_rule import AssertionLayer\n"
         import_lines = list(re.finditer(r'^(?:from\s+[\w.]+\s+import\s+.*|import\s+.*)$', source, re.MULTILINE))
         if import_lines:
             last_import = import_lines[-1]
-            source = source[:last_import.end()] + '\n' + ts_import + source[last_import.end():]
+            source = source[:last_import.end()] + '\n' + ts_import + assertion_imports + source[last_import.end():]
 
         # 7c. 在 def test_xxx(healing_page): 后插入时间戳变量
         source = re.sub(
@@ -159,26 +162,50 @@ Run with:
             extract_block += "    # 变量将在编排引擎中自动注入到后续模块\n"
             injection_blocks.append(extract_block)
 
-        # 8b. 断言桩
+        # 8b. 断言桩（可执行代码）
         assert_block = "    # === 三层断言 ===\n"
+        assert_block += "    _assertion_engine = ThreeLayerAssertionEngine()\n"
+        assert_block += "    _assertions = []\n"
         if assert_stubs:
             for stub in assert_stubs:
                 layer = stub.get("layer", "ui")
                 desc = stub.get("description", "")
+                atype = stub.get("type", "visible")
                 if layer == "ui":
-                    assert_block += f"    # UI断言: {desc}\n"
-                    assert_block += f"    # expect(healing_page.get_by_text('{desc}')).to_be_visible()\n"
+                    selector = stub.get("selector", "")
+                    text = stub.get("text", "")
+                    assert_block += f"    _assertions.append({{'layer': 'ui', 'type': '{atype}', 'description': '{desc}'"
+                    if text:
+                        assert_block += f", 'text': '{text}'"
+                    if selector:
+                        assert_block += f", 'selector': '{selector}'"
+                    assert_block += "})\n"
                 elif layer == "api":
-                    assert_block += f"    # API断言: {desc}\n"
-                    assert_block += f"    # assert api_response['code'] == 0\n"
+                    url_pattern = stub.get("url_pattern", "")
+                    assert_block += f"    _assertions.append({{'layer': 'api', 'type': '{atype}', 'description': '{desc}'"
+                    if url_pattern:
+                        assert_block += f", 'url_pattern': '{url_pattern}'"
+                    assert_block += "})\n"
                 elif layer == "db":
-                    assert_block += f"    # DB断言: {desc}\n"
-                    assert_block += f"    # assert db_query_result is not None\n"
+                    sql = stub.get("sql", "")
+                    assert_block += f"    _assertions.append({{'layer': 'db', 'type': '{atype}', 'description': '{desc}'"
+                    if sql:
+                        assert_block += f", 'sql': '{sql}'"
+                    assert_block += "})\n"
         else:
-            assert_block += "    # UI断言: 操作成功提示可见\n"
-            assert_block += "    # expect(healing_page.get_by_text('成功')).to_be_visible()\n"
-            assert_block += "    # API断言: 关键接口返回 code=0\n"
-            assert_block += "    # DB断言: 数据记录已写入（MySQL不可达则跳过）\n"
+            # 默认断言：UI 检查页面无报错、API 检查关键接口 code=0
+            assert_block += "    _assertions.append({'layer': 'ui', 'type': 'visible', 'description': '操作成功提示可见', 'text': '成功'})\n"
+            assert_block += "    # API 和 DB 断言需要 api_calls 上下文，由编排引擎在回放后统一执行\n"
+
+        assert_block += "    if _assertions:\n"
+        assert_block += "        _assertion_results = _assertion_engine.run_assertions(_assertions, {'page': healing_page})\n"
+        assert_block += "        _failed = [r for r in _assertion_results if r.status == 'failed']\n"
+        assert_block += "        if _failed:\n"
+        assert_block += "            for r in _failed:\n"
+        assert_block += "                print(f'❌ [{r.layer.upper()}] {r.description}: 期望 {r.expected}, 实际 {r.actual}')\n"
+        assert_block += "            assert False, f'{len(_failed)} 条断言失败'\n"
+        assert_block += "        else:\n"
+        assert_block += "            print(f'✅ 三层断言通过: {len(_assertion_results)} 条')\n"
         injection_blocks.append(assert_block)
 
         # 一次性在最后一个 healing_page.xxx 操作行之后注入所有代码块
@@ -192,6 +219,10 @@ Run with:
 
         # 10. 清洗录制噪音（生成精简版）
         source = self._clean_noise(source)
+
+        # 10a. Async/healer 兼容转换
+        #     playwright-healer 全异步设计，需将同步调用转为 async/await
+        source = self._async_compat_transform(source)
 
         # 11. 写入精简版输出文件
         with open(output_path, 'w', encoding='utf-8') as f:
@@ -235,8 +266,13 @@ Run with:
         operations = []
         for line in source.split('\n'):
             stripped = line.strip()
-            if stripped.startswith('healing_page.') and not stripped.startswith('#'):
-                operations.append(stripped)
+            # 匹配 healing_page.xxx 或 await healing_page.xxx
+            if ('healing_page.' in stripped and 
+                not stripped.startswith('#') and
+                (stripped.startswith('healing_page.') or 'await healing_page.' in stripped)):
+                # 去掉 await 前缀，统一格式
+                clean_op = stripped.replace('await ', '').strip()
+                operations.append(clean_op)
 
         if not page_class_name:
             page_class_name = self._to_camel_case(module_name) + "Page"
@@ -303,6 +339,20 @@ class BasePage:
     def wait_for_selector(self, selector: str, timeout: int = 10000):
         """等待选择器出现"""
         self.page.wait_for_selector(selector, timeout=timeout)
+
+    def wait_for_page_ready(self, timeout: int = 15000):
+        """智能等待页面加载完成
+        
+        策略:
+          1. 等待 DOMContentLoaded
+          2. 等待网络空闲
+          3. 等待常见加载指示器消失
+        """
+        try:
+            self.page.wait_for_load_state("domcontentloaded", timeout=timeout)
+            self.page.wait_for_load_state("networkidle", timeout=5000)
+        except Exception:
+            pass  # 超时不阻塞，继续执行
 '''
         base_page_path = output_path / "base_page.py"
         base_page_path.write_text(base_page_code, encoding='utf-8')
@@ -313,8 +363,13 @@ class BasePage:
 
         # 提取 import 中需要的模块
         needs_re = any('re.compile' in op or 're.' in op for op in operations)
+        needs_os = any('os.environ' in op for op in operations)
 
-        imports = "import re\n" if needs_re else ""
+        imports = ""
+        if needs_os:
+            imports += "import os\n"
+        if needs_re:
+            imports += "import re\n"
         imports += f"from .base_page import BasePage\n"
 
         business_page_code = f'''#!/usr/bin/env python3
@@ -385,10 +440,21 @@ def test_{module_name}(healing_page) -> None:
             "business_page": str(business_page_path),
             "test_case": str(test_case_path),
         }
+        # 转换为相对路径（相对于项目根目录）
+        try:
+            from pathlib import Path as StdPath
+            cwd = StdPath.cwd()
+            base_rel = base_page_path.relative_to(cwd)
+            business_rel = business_page_path.relative_to(cwd)
+            test_rel = test_case_path.relative_to(cwd)
+        except ValueError:
+            base_rel = base_page_path
+            business_rel = business_page_path
+            test_rel = test_case_path
         print(f"✅ PO 分层生成完成:")
-        print(f"   BasePage: {base_page_path}")
-        print(f"   业务Page: {business_page_path}")
-        print(f"   测试用例: {test_case_path}")
+        print(f"   BasePage: {base_rel}")
+        print(f"   业务Page: {business_rel}")
+        print(f"   测试用例: {test_rel}")
         return result
 
     def _to_camel_case(self, name: str) -> str:
@@ -505,6 +571,10 @@ def test_{module_name}(healing_page) -> None:
             for op in method_ops:
                 converted = self._convert_to_semantic_op(op, params)
                 method_lines.append(f"{indent}    {converted}")
+                
+                # 如果是 goto 操作，自动添加智能等待
+                if '.goto(' in op:
+                    method_lines.append(f"{indent}    self.wait_for_page_ready()")
 
             method_lines.append("")
             methods.append('\n'.join(method_lines))
@@ -587,11 +657,7 @@ def test_{module_name}(healing_page) -> None:
                 current_doc = f"点击「{label_text}」"
                 current_params = {}
                 current_fill_labels = []
-                # 如果后面紧跟弹窗操作，合并进来（由下一个循环判断）
-                flush()
-                current_ops = []
-                current_name = ""
-                current_doc = ""
+                # 注意：不要立即 flush，让后续操作有机会合并进来
                 continue
 
             # fill 操作：收集到当前组
@@ -621,6 +687,11 @@ def test_{module_name}(healing_page) -> None:
                 if not current_name:
                     current_name = f"click_{self._sanitize_name(label_text)}"
                     current_doc = f"点击{label_text}"
+            elif action_type == "button_click" and label_text:
+                # 按钮点击，如果没有名字则用按钮文本命名
+                if not current_name:
+                    current_name = f"click_{self._sanitize_name(label_text)}"
+                    current_doc = f"点击按钮「{label_text}」"
 
         flush()
         return groups
@@ -693,6 +764,7 @@ def test_{module_name}(healing_page) -> None:
         策略:
           - get_by_role / get_by_text / get_by_label → 保留（已经是语义定位）
           - locator("css选择器") → 尝试转为 get_by_text 区域定位
+          - click("div:has-text(...)") → 转为 get_by_text(...).click()
           - fill 的值 → 替换为参数引用
         """
         result = op
@@ -703,17 +775,107 @@ def test_{module_name}(healing_page) -> None:
             result = self._parametrize_fill_value(result, params)
             return result
 
+        # 处理 click/fill 直接传 CSS 选择器的情况：click("div:has-text('xxx')")
+        click_match = re.search(r'self\.page\.click\(["\']([^"\']+)["\']', op)
+        if click_match:
+            css_selector = click_match.group(1)
+            # 尝试从 has-text 中提取文本
+            has_text_match = re.search(r'has-text\([\'"]([^\'"]+)[\'"]\)', css_selector)
+            if has_text_match:
+                text_content = has_text_match.group(1)
+                return f'self.page.get_by_text("{text_content}").click()'
+        
+        fill_direct_match = re.search(r'self\.page\.fill\(["\']([^"\']+)["\']', op)
+        if fill_direct_match:
+            css_selector = fill_direct_match.group(1)
+            has_text_match = re.search(r'has-text\([\'"]([^\'"]+)[\'"]\)', css_selector)
+            if has_text_match:
+                text_content = has_text_match.group(1)
+                fill_match = re.search(r'value=["\']([^"\']*)["\']', op)
+                fill_value = fill_match.group(1) if fill_match else ""
+                param_ref = self._find_param_ref(fill_value, params)
+                return f'self.page.get_by_text("{text_content}").fill({param_ref})'
+        
+        # 处理 locator().click() 或 locator().fill() 的链式调用
+        locator_chain_match = re.search(r'self\.page\.locator\(["\']([^"\']+)["\']\)\.([a-z_]+)\(', op)
+        if locator_chain_match:
+            css_selector = locator_chain_match.group(1)
+            action = locator_chain_match.group(2)
+            has_text_match = re.search(r'has-text\([\'"]([^\'"]+)[\'"]\)', css_selector)
+            if has_text_match:
+                text_content = has_text_match.group(1)
+                if action == 'click':
+                    return f'self.page.get_by_text("{text_content}").click()'
+                elif action == 'fill':
+                    fill_match = re.search(r'\.fill\([\'"]([^\'"]*)[\'"]', op)
+                    fill_value = fill_match.group(1) if fill_match else ""
+                    param_ref = self._find_param_ref(fill_value, params)
+                    return f'self.page.get_by_text("{text_content}").fill({param_ref})'
+
         # CSS/ID 定位器 → 尝试语义转换
         # locator("#xxx") 或 locator("css选择器")
         locator_match = re.search(r'self\.page\.locator\("([^"]+)"\)', op)
         if locator_match:
             css_selector = locator_match.group(1)
+            
             # 如果操作包含 .get_by_text 或有 name 参数的复合定位器，保留
             if 'get_by_text(' in op or 'name=' in op:
                 result = self._parametrize_fill_value(result, params)
                 return result
 
-            # 纯 CSS 定位器无法自动转语义，保留原样但标注
+            # 尝试从 CSS 选择器中提取 has-text 内容
+            has_text_match = re.search(r'has-text\([\'"]([^\'"]+)[\'"]\)', css_selector)
+            if has_text_match:
+                text_content = has_text_match.group(1)
+                # 转换为 get_by_text
+                if '.click(' in op:
+                    return f'self.page.get_by_text("{text_content}").click()'
+                elif '.fill(' in op:
+                    fill_match = re.search(r'\.fill\([\'"]([^\'"]*)[\'"]', op)
+                    fill_value = fill_match.group(1) if fill_match else ""
+                    param_ref = self._find_param_ref(fill_value, params)
+                    return f'self.page.get_by_text("{text_content}").fill({param_ref})'
+            
+            # 处理 >> text= 语法："form >> text=展开" → locator("form").get_by_text("展开")
+            text_arrow_match = re.search(r'(.+?)\s*>>\s*text=([\'"])([^\'"]+)\2', css_selector)
+            if text_arrow_match:
+                base_selector = text_arrow_match.group(1).strip()
+                text_content = text_arrow_match.group(3)
+                if '.click(' in op:
+                    return f'self.page.locator("{base_selector}").get_by_text("{text_content}").click()'
+                elif '.fill(' in op:
+                    fill_match = re.search(r'\.fill\([\'"]([^\'"]*)[\'"]', op)
+                    fill_value = fill_match.group(1) if fill_match else ""
+                    param_ref = self._find_param_ref(fill_value, params)
+                    return f'self.page.locator("{base_selector}").get_by_text("{text_content}").fill({param_ref})'
+            
+            # 处理 role 属性选择器：'[role="textbox"][name*="请输入"]' → get_by_role("textbox", name="请输入")
+            role_match = re.search(r'\[role=[\'"]([^\'"]+)[\'"]\]', css_selector)
+            name_match = re.search(r'\[name\*=?[\'"]([^\'"]+)[\'"]\]', css_selector)
+            if role_match and name_match:
+                role_value = role_match.group(1)
+                name_value = name_match.group(1)
+                # 检查是否有 nth
+                nth_match = re.search(r'>>\s*nth=(\d+)', css_selector)
+                if nth_match:
+                    nth_index = nth_match.group(1)
+                    if '.click(' in op:
+                        return f'self.page.get_by_role("{role_value}", name="{name_value}").nth({nth_index}).click()'
+                    elif '.fill(' in op:
+                        fill_match = re.search(r'\.fill\([\'"]([^\'"]*)[\'"]', op)
+                        fill_value = fill_match.group(1) if fill_match else ""
+                        param_ref = self._find_param_ref(fill_value, params)
+                        return f'self.page.get_by_role("{role_value}", name="{name_value}").nth({nth_index}).fill({param_ref})'
+                else:
+                    if '.click(' in op:
+                        return f'self.page.get_by_role("{role_value}", name="{name_value}").click()'
+                    elif '.fill(' in op:
+                        fill_match = re.search(r'\.fill\([\'"]([^\'"]*)[\'"]', op)
+                        fill_value = fill_match.group(1) if fill_match else ""
+                        param_ref = self._find_param_ref(fill_value, params)
+                        return f'self.page.get_by_role("{role_value}", name="{name_value}").fill({param_ref})'
+
+            # 纯 CSS 定位器无法自动转语义，保留原样
             result = self._parametrize_fill_value(result, params)
             return result
 
@@ -735,15 +897,19 @@ def test_{module_name}(healing_page) -> None:
         if not fill_value:
             return op
 
-        # 检查值是否匹配某个参数的默认值
+        param_ref = self._find_param_ref(fill_value, params)
+        # 替换为参数引用
+        result = op.replace(f'.fill("{fill_value}")', f'.fill({param_ref})')
+        result = result.replace(f".fill('{fill_value}')", f".fill({param_ref})")
+        return result
+
+    def _find_param_ref(self, fill_value: str, params: Dict) -> str:
+        """查找 fill 值对应的参数引用"""
         for param_name, default_val in params.items():
             if fill_value == default_val:
-                # 替换为参数引用
-                result = op.replace(f'.fill("{fill_value}")', f'.fill({param_name})')
-                result = result.replace(f".fill('{fill_value}')", f".fill({param_name})")
-                return result
-
-        return op
+                return param_name
+        # 没有找到匹配的参数，返回原值
+        return f'"{fill_value}"'
 
     def _infer_navigate_name(self, url: str, seg_index: int) -> str:
         """根据 URL 推断导航方法名"""
@@ -1040,17 +1206,356 @@ def test_{module_name}(healing_page) -> None:
           录制的 click → option 两步不要合并
           不要用 _wait_and_select_option 替换（可能选错下拉框）
         """
-        # 规则1: goto 加超时和 domcontentloaded
+        # 规则1: goto 加超时和 domcontentloaded，并从环境变量读取URL
+        # 匹配 goto 中的 URL，检查是否在环境变量中有对应配置
+        def _replace_goto_url(match):
+            """将 goto 中的 URL 替换为从环境变量读取"""
+            full_match = match.group(0)
+            url = match.group(1)
+            
+            # 根据 URL 特征判断应该使用哪个环境变量
+            env_var = None
+            if "login" in url or "user-login" in url:
+                env_var = "WEB_DEMAND_LOGIN_PAGE_URL"
+            elif "demand_front" in url or "overview" in url:
+                env_var = "WEB_DEMAND_URL"
+            
+            if env_var:
+                # 使用环境变量
+                return f'healing_page.goto(os.environ.get("{env_var}", "{url}"), timeout=30000, wait_until="domcontentloaded")'
+            else:
+                # 保留原始URL，但添加超时
+                return f'healing_page.goto("{url}", timeout=30000, wait_until="domcontentloaded")'
+        
         source = re.sub(
-            r'healing_page\.goto\(("([^"]+)")\)',
-            r'healing_page.goto(\1, timeout=30000, wait_until="domcontentloaded")',
+            r'healing_page\.goto\("([^"]+)"\)',
+            _replace_goto_url,
             source,
         )
+        
         # 已经有 timeout 参数的不重复加
         source = re.sub(
-            r'healing_page\.goto\(("([^"]+)", timeout=(\d+), wait_until="domcontentloaded"), timeout=(\d+), wait_until="domcontentloaded"\)',
-            r'healing_page.goto(\1)',
+            r'healing_page\.goto\("([^"]+)", timeout=(\d+), wait_until="domcontentloaded"\)',
+            r'healing_page.goto("\1", timeout=\2, wait_until="domcontentloaded")',
             source,
         )
 
         return source
+
+    # ── Async / Healer 兼容转换 ────────────────────────────────────
+
+    # HealingPage / HealingLocator 上的异步方法集合（需要 await）
+    _ASYNC_METHODS = frozenset({
+        # HealingPage 直接方法
+        'goto', 'reload', 'go_back', 'go_forward',
+        'wait_for_load_state', 'wait_for_url', 'screenshot', 'title',
+        'evaluate', 'set_viewport_size', 'close', 'shutdown',
+        'click', 'fill', 'type_text', 'type', 'select', 'check',
+        'uncheck', 'hover', 'get_text', 'get_attribute',
+        'is_visible', 'is_present', 'count', 'find_all',
+        # HealingLocator 方法
+        'press', 'focus', 'clear', 'tap', 'dispatch_event',
+        'scroll_into_view_if_needed', 'wait_for',
+        'inner_text', 'inner_html', 'text_content', 'input_value',
+        'is_hidden', 'is_enabled', 'is_disabled', 'is_checked',
+        'all', 'bounding_box', 'select_option', 'screenshot',
+    })
+
+    def _async_compat_transform(self, source: str) -> str:
+        """将同步 healing_page 调用转换为 async/await 格式，并注入 async fixture chain。
+
+        playwright-healer 全异步设计，必须使用 async Page。
+        本方法：
+        1. 选择器重写（filter/get_by_text/nth → HealingLocator 兼容选择器）
+        2. 注入 async fixture chain（playwright→browser→context→page→healing_page）
+        3. 转换测试函数为 async def + @pytest.mark.asyncio
+        4. healing_page.xxx() → await healing_page.xxx()
+        """
+        # ── Step 1: locator("tag").filter(has_text=...).action() ──
+        # filter() 不存在于 HealingLocator，需转为 CSS :has-text() 选择器
+        def _repl_filter(match: re.Match) -> str:
+            tag = match.group(1)
+            raw_text = match.group(2)
+            action = match.group(3)
+            # 去掉正则锚点 ^ $ 和 (?i) 等前缀
+            text = raw_text
+            for prefix in ('(?i)', '(?-i)'):
+                text = text.replace(prefix, '')
+            text = text.lstrip('^').rstrip('$')
+            text_escaped = text.replace("'", "\\'")
+            return (
+                f"await healing_page.{action}("
+                f'"{tag}:has-text(\'{text_escaped}\')", "{text}")'
+            )
+
+        source = re.sub(
+            r"healing_page\.locator\(['\"]([^'\"]+)['\"]\)"
+            r'\.filter\(has_text=re\.compile\(r["\']([^"\']+)["\']\)\)'
+            r'\.(\w+)\(\)',
+            _repl_filter,
+            source,
+        )
+
+        # 也处理 filter(has_text="literal") 的情况
+        def _repl_filter_literal(match: re.Match) -> str:
+            tag = match.group(1)
+            text = match.group(2)
+            action = match.group(3)
+            text_escaped = text.replace("'", "\\'")
+            return (
+                f"await healing_page.{action}("
+                f'"{tag}:has-text(\'{text_escaped}\')", "{text}")'
+            )
+
+        source = re.sub(
+            r"healing_page\.locator\(['\"]([^'\"]+)['\"]\)"
+            r'\.filter\(has_text=["\']([^"\']+)["\']\)'
+            r'\.(\w+)\(\)',
+            _repl_filter_literal,
+            source,
+        )
+
+        # ── Step 2: locator("tag").get_by_text("text").action() ──
+        # HealingLocator 没有 get_by_text()，需转为 "tag >> text=text" 选择器
+        def _repl_loc_get_by_text(match: re.Match) -> str:
+            tag = match.group(1)
+            text = match.group(2)
+            action = match.group(3)
+            return (
+                f'await healing_page.{action}('
+                f'"{tag} >> text={text}", "{text}")'
+            )
+
+        source = re.sub(
+            r"healing_page\.locator\(['\"]([^'\"]+)['\"]\)"
+            r'\.get_by_text\(["\']([^"\']+)["\']\)'
+            r'\.(\w+)\(\)',
+            _repl_loc_get_by_text,
+            source,
+        )
+
+        # ── Step 3: get_by_role(...).nth(n).action(...) ──
+        # HealingLocator.nth() 返回原始 Locator，不支持自愈
+        # 转为 CSS 选择器 + >> nth=n
+
+        # 3a. get_by_role("role", name="name").nth(n).fill("value")
+        def _repl_role_nth_fill(match: re.Match) -> str:
+            role = match.group(1)
+            name = match.group(2)
+            nth = match.group(3)
+            value = match.group(4)
+            nth_display = int(nth) + 1
+            selector = f'[role=\\"{role}\\"][name*=\\"{name}\\"] >> nth={nth}'
+            desc = f'{name}输入框(第{nth_display}个)'
+            return (
+                f'await healing_page.fill('
+                f'\'{selector}\', value="{value}", description="{desc}")'
+            )
+
+        source = re.sub(
+            r"healing_page\.get_by_role\(['\"]([^'\"]+)['\"],\s*name=['\"]([^'\"]+)['\"]\)"
+            r'\.nth\((\d+)\)\.fill\(["\']([^"\']*)["\']\)',
+            _repl_role_nth_fill,
+            source,
+        )
+
+        # 3b. get_by_role("role", name="name").nth(n).click()
+        def _repl_role_nth_click(match: re.Match) -> str:
+            role = match.group(1)
+            name = match.group(2)
+            nth = match.group(3)
+            nth_display = int(nth) + 1
+            selector = f'[role=\\"{role}\\"][name*=\\"{name}\\"] >> nth={nth}'
+            desc = f'{name}(第{nth_display}个)'
+            return f'await healing_page.click(\'{selector}\', "{desc}")'
+
+        source = re.sub(
+            r"healing_page\.get_by_role\(['\"]([^'\"]+)['\"],\s*name=['\"]([^'\"]+)['\"]\)"
+            r'\.nth\((\d+)\)\.click\(\)',
+            _repl_role_nth_click,
+            source,
+        )
+
+        # 3c. get_by_role("role").nth(n).fill("value")（无 name 参数）
+        def _repl_role_nth_fill_noname(match: re.Match) -> str:
+            role = match.group(1)
+            nth = match.group(2)
+            value = match.group(3)
+            nth_display = int(nth) + 1
+            selector = f'[role=\\"{role}\\"] >> nth={nth}'
+            desc = f'{role}输入框(第{nth_display}个)'
+            return (
+                f'await healing_page.fill('
+                f'\'{selector}\', value="{value}", description="{desc}")'
+            )
+
+        source = re.sub(
+            r"healing_page\.get_by_role\(['\"]([^'\"]+)['\"]\)"
+            r'\.nth\((\d+)\)\.fill\(["\']([^"\']*)["\']\)',
+            _repl_role_nth_fill_noname,
+            source,
+        )
+
+        # 3d. get_by_role("role").nth(n).click()（无 name 参数）
+        def _repl_role_nth_click_noname(match: re.Match) -> str:
+            role = match.group(1)
+            nth = match.group(2)
+            nth_display = int(nth) + 1
+            selector = f'[role=\\"{role}\\"] >> nth={nth}'
+            desc = f'{role}(第{nth_display}个)'
+            return f'await healing_page.click(\'{selector}\', "{desc}")'
+
+        source = re.sub(
+            r"healing_page\.get_by_role\(['\"]([^'\"]+)['\"]\)"
+            r'\.nth\((\d+)\)\.click\(\)',
+            _repl_role_nth_click_noname,
+            source,
+        )
+
+        # ── Step 4: 注入 async fixture chain + 转换测试为 async ──
+        # playwright-healer 全异步设计，必须使用 async Page。
+        # 用 async_playwright() 替代 sync_playwright()，避免 event loop 冲突。
+
+        # 4a. 移除生成脚本中已有的 sync browser_context_args fixture（避免与 conftest.py 冲突）
+        source = re.sub(
+            r'@pytest\.fixture\(scope="session"\)\n'
+            r'def browser_context_args\([^)]*\):\n'
+            r'(?:    [^\n]*\n)+',
+            '',
+            source,
+        )
+
+        # 4b. 注入 async fixture chain
+        async_fixture = '''
+# ── Async fixture chain ──────────────────────────────────────
+# 使用 async_playwright 替代 sync_playwright，避免 Python 3.14 event loop 冲突。
+# playwright-healer 的 HealingPage 全异步设计，必须传入 async Page。
+
+@pytest_asyncio.fixture(scope="session")
+async def playwright():
+    from playwright.async_api import async_playwright
+    pw = await async_playwright().start()
+    yield pw
+    await pw.stop()
+
+@pytest_asyncio.fixture(scope="session")
+async def browser_type(playwright, browser_name: str):
+    return getattr(playwright, browser_name)
+
+@pytest_asyncio.fixture(scope="session")
+async def browser_type_launch_args():
+    return {"args": ["--no-sandbox", "--ignore-certificate-errors"]}
+
+@pytest_asyncio.fixture(scope="session")
+async def browser(browser_type, browser_type_launch_args, browser_name, browser_channel):
+    launch_args = dict(browser_type_launch_args)
+    if browser_channel:
+        launch_args["channel"] = browser_channel
+    br = await browser_type.launch(**launch_args)
+    yield br
+    await br.close()
+
+@pytest_asyncio.fixture(scope="session")
+async def browser_context_args():
+    import os
+    args = {
+        "ignore_https_errors": True,
+        "viewport": {"width": 1366, "height": 768},
+    }
+    storage_state = "login_state/storage_state.json"
+    if os.path.exists(storage_state):
+        args["storage_state"] = storage_state
+    return args
+
+@pytest_asyncio.fixture
+async def context(browser, browser_context_args):
+    c = await browser.new_context(**browser_context_args)
+    yield c
+    await c.close()
+
+@pytest_asyncio.fixture
+async def page(context):
+    p = await context.new_page()
+    yield p
+    await p.close()
+
+@pytest_asyncio.fixture
+async def healing_page(page, healing_config, request):
+    """async HealingPage — 接收 async Page，提供自愈能力。"""
+    from playwright_healer.healer import HealingPage
+    hp = HealingPage(page, healing_config, test_name=request.node.name)
+    yield hp
+    await hp.shutdown()
+
+'''
+
+        # 插入到第一个 def test_ 之前
+        first_test = re.search(
+            r'^(?=[ \t]*def test_)',
+            source,
+            flags=re.MULTILINE,
+        )
+        if first_test:
+            pos = first_test.start()
+            source = source[:pos] + async_fixture + source[pos:]
+
+        # 4c. 转换测试函数为 async def + @pytest.mark.asyncio
+        source = re.sub(
+            r'^([ \t]*)def (test_\w+\(healing_page\))',
+            r'\1@pytest.mark.asyncio\n\1async def \2',
+            source,
+            flags=re.MULTILINE,
+        )
+
+        # ── Step 5: healing_page.async_method(...) → await healing_page.async_method(...) ──
+        lines = source.split('\n')
+        result = []
+        for line in lines:
+            stripped = line.strip()
+
+            # 跳过空行、注释、不含 healing_page 的行
+            if not stripped or stripped.startswith('#') or 'healing_page' not in stripped:
+                result.append(line)
+                continue
+
+            # 跳过 expect(healing_page...) — expect 不需要 async
+            if re.search(r'expect\s*\(\s*healing_page', stripped):
+                result.append(line)
+                continue
+
+            # 跳过已有 await 的行
+            if stripped.startswith('await '):
+                result.append(line)
+                continue
+
+            # 跳过 fixture 定义行
+            if 'def healing_page' in stripped or 'healing_config' in stripped:
+                result.append(line)
+                continue
+
+            # 跳过赋值行中的 healing_page 引用（如 alias_inject 注入的 context = healing_page.context）
+            if re.match(r'^\s*\w+\s*=\s*healing_page', line):
+                result.append(line)
+                continue
+
+            # 只处理以 healing_page. 开头的语句行（缩进后）
+            if not stripped.startswith('healing_page.'):
+                result.append(line)
+                continue
+
+            # 找到链式调用中最后一个方法
+            all_methods = list(re.finditer(r'\.(\w+)\(', stripped))
+            if not all_methods:
+                result.append(line)
+                continue
+
+            terminal_method = all_methods[-1].group(1)
+
+            # 如果终端方法是异步方法，添加 await
+            if terminal_method in self._ASYNC_METHODS:
+                indent = line[:len(line) - len(line.lstrip())]
+                result.append(f'{indent}await {stripped}')
+            else:
+                result.append(line)
+
+        return '\n'.join(result)

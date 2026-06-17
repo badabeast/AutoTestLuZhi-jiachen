@@ -21,7 +21,7 @@ def test_healer_config_loaded(healing_config):
     from playwright_healer.ai_providers import AIProvider
 
     provider = healing_config.providers[0]
-    assert provider.provider == AIProvider.ANTHROPIC, "使用 ANTHROPIC provider"
+    assert provider.provider == AIProvider.OPENAI, "使用 OPENAI 兼容 provider"
     assert provider.api_url, "API URL 已配置"
     assert provider.model, "模型已配置"
     assert provider.api_key, "API key 不为空"
@@ -36,8 +36,8 @@ def test_healer_config_module():
     assert len(config.providers) > 0, "配置中有 provider"
 
     env_vars = get_healer_env_vars()
-    assert env_vars.get("ANTHROPIC_AUTH_TOKEN"), "环境变量中有 ANTHROPIC_AUTH_TOKEN"
-    assert env_vars.get("ZCY_HEALER_API_URL"), "环境变量中有 ZCY_HEALER_API_URL"
+    assert env_vars.get("AI_API_KEY"), "环境变量中有 AI_API_KEY"
+    assert env_vars.get("AI_BASE_URL"), "环境变量中有 AI_BASE_URL"
 
 
 def test_healer_env_vars_configured():
@@ -46,8 +46,8 @@ def test_healer_env_vars_configured():
 
     load_env()
 
-    assert os.environ.get("ANTHROPIC_AUTH_TOKEN"), "ANTHROPIC_AUTH_TOKEN 已配置"
-    api_url = os.environ.get("ZCY_HEALER_API_URL", "")
+    assert os.environ.get("AI_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN"), "AI_API_KEY 已配置（兼容 ANTHROPIC_AUTH_TOKEN）"
+    api_url = os.environ.get("AI_BASE_URL", "") or os.environ.get("ZCY_HEALER_API_URL", "")
     assert api_url, "AI 平台 API URL 已配置"
 
 

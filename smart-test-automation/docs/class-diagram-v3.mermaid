@@ -1,0 +1,126 @@
+classDiagram
+    class MonkeyPatchPage {
+        -_page: Page
+        +get_by_role(role, **kwargs) HealingLocator
+        +get_by_text(text, **kwargs) HealingLocator
+        +get_by_label(label, **kwargs) HealingLocator
+        +locator(selector, **kwargs) HealingLocator
+        +__getattr__(name) Any
+    }
+
+    class HealingLocator {
+        -_locator: Locator
+        -_selector: str
+        -_page: Page
+        +nth(index) HealingLocator
+        +filter(**kwargs) HealingLocator
+        +click(**kwargs) void
+        +fill(value, **kwargs) void
+        +__getattr__(name) Any
+        -_make_safe_action(name, method) Callable
+    }
+
+    class LocatorActionError {
+        +action: str
+        +selector: str
+        +page_url: str
+        +original_error: Exception
+    }
+
+    class SelectorExpr {
+        +method: str
+        +args: tuple
+        +kwargs: dict
+        +chain: list~ChainItem~
+        +raw: str
+        +base_selector: str
+        +chain_suffix: str
+    }
+
+    class ChainItem {
+        +method: str
+        +args: tuple
+        +kwargs: dict
+    }
+
+    class FiveTierPipeline {
+        +config: PipelineConfig
+        +confidence_threshold: float
+        +heal(page, selector, action, page_url, dom_schema) HealingResult
+    }
+
+    class CacheFirstMatcher {
+        +cache_dir: str
+        +try_match(parsed, page_url) HealingResult?
+        +record(original, healed, page_url, confidence) void
+    }
+
+    class SemanticLocatorGenerator {
+        +PRIORITY_WEIGHTS: dict
+        +try_generate(page, parsed, action, dom_schema) HealingResult?
+    }
+
+    class DynamicAttrFilterMatcher {
+        +DYNAMIC_PATTERNS: dict
+        +try_match(page, parsed, action, dom_schema) HealingResult?
+        -_filter_dynamic_attrs(css) str
+    }
+
+    class DOMTopologyMatcher {
+        +try_match(page, parsed, action, dom_schema) HealingResult?
+        -_extract_target_topology(parsed, dom_schema) dict
+        -_compare_topologies(target, candidate) float
+    }
+
+    class IframeShadowPatcher {
+        +try_pierce(page, parsed, action, dom_schema) HealingResult?
+        -_try_iframe(page, parsed) HealingResult?
+        -_try_shadow(page, parsed) HealingResult?
+    }
+
+    class ChainHealingPipeline {
+        +heal(page, selector, action, page_url, dom_schema) ChainHealingResult
+        -_rechain(healed_base, chain_suffix) str
+    }
+
+    class AIFallbackHealer {
+        +try_heal(page, parsed, action, page_url, dom_schema) AIFallbackResult
+        -_calculate_confidence(ai_score, structure, context) float
+    }
+
+    class SourcePatcher {
+        +patch_file(file_path, old_selector, new_selector) bool$
+    }
+
+    class HealingResult {
+        +success: bool
+        +healed_selector: str
+        +strategy: str
+        +confidence: float
+        +detail: str
+    }
+
+    class ChainHealingResult {
+        +success: bool
+        +healed_selector: str
+        +base_healed_selector: str
+        +strategy: str
+        +confidence: float
+        +detail: str
+    }
+
+    MonkeyPatchPage --> HealingLocator : creates
+    HealingLocator --> LocatorActionError : raises
+    FiveTierPipeline --> CacheFirstMatcher : L1
+    FiveTierPipeline --> SemanticLocatorGenerator : L2
+    FiveTierPipeline --> DynamicAttrFilterMatcher : L3
+    FiveTierPipeline --> DOMTopologyMatcher : L4
+    FiveTierPipeline --> IframeShadowPatcher : L5
+    FiveTierPipeline --> HealingResult : returns
+    SemanticLocatorGenerator ..> HeuristicHealer : 复用算法
+    DynamicAttrFilterMatcher ..> HealerDOMMatcher : 复用算法
+    DOMTopologyMatcher ..> HealerDOMMatcher : 复用算法
+    ChainHealingPipeline --> FiveTierPipeline : delegates base
+    ChainHealingPipeline --> AIFallbackHealer : AI fallback
+    ChainHealingPipeline --> ChainHealingResult : returns
+    SourcePatcher ..> SelectorExpr : parses

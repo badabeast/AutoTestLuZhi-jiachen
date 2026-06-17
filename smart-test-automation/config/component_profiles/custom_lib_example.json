@@ -1,0 +1,34 @@
+{
+  "name": "custom_lib_xxx",
+  "display_name": "XXX自研组件库",
+  "version": "1.x",
+  "detect_patterns": [
+    {"type": "class_prefix", "value": "xxx-", "weight": 1.0},
+    {"type": "attribute", "value": "data-field", "weight": 0.8},
+    {"type": "attribute", "value": "data-component", "weight": 0.6}
+  ],
+  "locator_priorities": [
+    "data-field",
+    "data-testid",
+    "aria-label",
+    "role+name",
+    "css_stable",
+    "text"
+  ],
+  "attribute_mappings": [
+    {"attribute": "data-field", "semantic": "业务字段名", "priority_boost": 0.15},
+    {"attribute": "data-component", "semantic": "组件类型", "priority_boost": 0.10}
+  ],
+  "stable_class_regex": [
+    "xxx-btn-[a-z]+",
+    "xxx-input-[a-z]+",
+    "xxx-form-[a-z]+",
+    "xxx-table-[a-z]+"
+  ],
+  "ignore_class_regex": [
+    "xxx-[a-f0-9]{6,}"
+  ],
+  "shadow_dom": true,
+  "nested_structure": "deep_wrapper",
+  "confidence_modifier": 0.90
+}

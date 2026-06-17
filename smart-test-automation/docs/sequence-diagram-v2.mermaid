@@ -1,0 +1,47 @@
+sequenceDiagram
+    participant Test as pytest 测试用例
+    participant MPP as MonkeyPatchPage
+    participant HL as HealingLocator
+    participant Page as sync Page
+    participant LAE as LocatorActionError
+    participant Conf as conftest.py
+    participant CHP as ChainHealingPipeline
+    participant Healer as playwright-healer<br/>HealingPipeline.find()
+    participant AI as AIFallbackHealer
+    participant OAI as 公司AI平台<br/>OpenAI兼容
+    participant SP as SourcePatcher
+
+    Test->>MPP: page.get_by_role("textbox", name="需求单名称")
+    MPP->>Page: _page.get_by_role(...)
+    Page-->>MPP: Locator
+    MPP-->>Test: HealingLocator(_selector="get_by_role(...)")
+
+    Test->>HL: .nth(1).fill("测试值")
+    HL->>Page: _locator.nth(1).fill("测试值")
+    Page-->>HL: TimeoutError
+    HL->>LAE: raise LocatorActionError(action="fill", selector="get_by_role(...).nth(1)")
+
+    LAE-->>Conf: pytest_runtest_makereport 捕获
+    Conf->>Conf: 写入 heal_report.json
+
+    Note over Conf: session 结束
+
+    Conf->>CHP: heal(selector, action, page_url)
+    
+    Note over CHP: 预处理：拆链
+    CHP->>CHP: parse_selector → base + chain
+
+    Note over CHP: Step 1: 调 healer 核心
+    CHP->>Healer: HealingPipeline.find(base_selector)
+    Healer->>OAI: POST /chat/completions (如L3)
+    OAI-->>Healer: healed_base
+    Healer-->>CHP: HealingResult(success=True, healed_selector="textbox::需求名称")
+
+    Note over CHP: 后处理：组链
+    CHP->>CHP: _rechain("textbox::需求名称", ".nth(1)")<br/>→ 'get_by_role("textbox", name="需求名称").nth(1)'
+    CHP->>Page: 验证完整选择器
+    Page-->>CHP: OK
+
+    CHP-->>Conf: ChainHealingResult(success=True)
+    Conf->>SP: patch_file(file, old, new)
+    SP-->>Conf: True

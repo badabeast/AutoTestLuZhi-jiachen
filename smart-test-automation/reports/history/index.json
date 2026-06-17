@@ -1,5 +1,195 @@
 [
   {
+    "timestamp": "2026-06-16 16:43:08",
+    "filename": "history/report_20260616_164308.html",
+    "json_file": "history/report_20260616_164308.json",
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "skipped": 0,
+    "duration": 0.9983479976654053
+  },
+  {
+    "timestamp": "2026-06-16 16:42:32",
+    "filename": "history/report_20260616_164232.html",
+    "json_file": "history/report_20260616_164232.json",
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "skipped": 0,
+    "duration": 1.0010390281677246
+  },
+  {
+    "timestamp": "2026-06-16 16:24:07",
+    "filename": "history/report_20260616_162407.html",
+    "json_file": "history/report_20260616_162407.json",
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "skipped": 0,
+    "duration": 100.20839929580688
+  },
+  {
+    "timestamp": "2026-06-16 16:22:26",
+    "filename": "history/report_20260616_162226.html",
+    "json_file": "history/report_20260616_162226.json",
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "skipped": 0,
+    "duration": 100.33871388435364
+  },
+  {
+    "timestamp": "2026-06-16 16:20:45",
+    "filename": "history/report_20260616_162045.html",
+    "json_file": "history/report_20260616_162045.json",
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "skipped": 0,
+    "duration": 107.52946019172668
+  },
+  {
+    "timestamp": "2026-06-16 16:18:56",
+    "filename": "history/report_20260616_161856.html",
+    "json_file": "history/report_20260616_161856.json",
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "skipped": 0,
+    "duration": 99.82947111129761
+  },
+  {
+    "timestamp": "2026-06-16 16:17:15",
+    "filename": "history/report_20260616_161715.html",
+    "json_file": "history/report_20260616_161715.json",
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "skipped": 0,
+    "duration": 108.01800513267517
+  },
+  {
+    "timestamp": "2026-06-16 16:15:27",
+    "filename": "history/report_20260616_161527.html",
+    "json_file": "history/report_20260616_161527.json",
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "skipped": 0,
+    "duration": 114.83927273750305
+  },
+  {
+    "timestamp": "2026-06-16 16:13:31",
+    "filename": "history/report_20260616_161331.html",
+    "json_file": "history/report_20260616_161331.json",
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "skipped": 0,
+    "duration": 107.83465909957886
+  },
+  {
+    "timestamp": "2026-06-16 16:11:42",
+    "filename": "history/report_20260616_161142.html",
+    "json_file": "history/report_20260616_161142.json",
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "skipped": 0,
+    "duration": 108.183758020401
+  },
+  {
+    "timestamp": "2026-06-16 16:09:53",
+    "filename": "history/report_20260616_160953.html",
+    "json_file": "history/report_20260616_160953.json",
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "skipped": 0,
+    "duration": 99.745285987854
+  },
+  {
+    "timestamp": "2026-06-16 16:08:12",
+    "filename": "history/report_20260616_160812.html",
+    "json_file": "history/report_20260616_160812.json",
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "skipped": 0,
+    "duration": 102.38631081581116
+  },
+  {
+    "timestamp": "2026-06-16 16:06:29",
+    "filename": "history/report_20260616_160629.html",
+    "json_file": "history/report_20260616_160629.json",
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "skipped": 0,
+    "duration": 102.06278705596924
+  },
+  {
+    "timestamp": "2026-06-16 16:00:43",
+    "filename": "history/report_20260616_160043.html",
+    "json_file": "history/report_20260616_160043.json",
+    "total": 0,
+    "passed": 0,
+    "failed": 0,
+    "skipped": 0,
+    "duration": 102.04184293746948
+  },
+  {
+    "timestamp": "2026-06-16 15:58:59",
+    "filename": "history/report_20260616_155859.html",
+    "json_file": "history/report_20260616_155859.json",
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "skipped": 0,
+    "duration": 102.06280994415283
+  },
+  {
+    "timestamp": "2026-06-16 15:57:17",
+    "filename": "history/report_20260616_155717.html",
+    "json_file": "history/report_20260616_155717.json",
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "skipped": 0,
+    "duration": 100.5618097782135
+  },
+  {
+    "timestamp": "2026-06-16 15:52:17",
+    "filename": "history/report_20260616_155217.html",
+    "json_file": "history/report_20260616_155217.json",
+    "total": 0,
+    "passed": 0,
+    "failed": 0,
+    "skipped": 0,
+    "duration": 101.69243335723877
+  },
+  {
+    "timestamp": "2026-06-16 15:50:35",
+    "filename": "history/report_20260616_155035.html",
+    "json_file": "history/report_20260616_155035.json",
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "skipped": 0,
+    "duration": 99.90086579322815
+  },
+  {
+    "timestamp": "2026-06-16 15:48:54",
+    "filename": "history/report_20260616_154854.html",
+    "json_file": "history/report_20260616_154854.json",
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "skipped": 0,
+    "duration": 104.4514741897583
+  },
+  {
     "timestamp": "2026-06-11 16:20:09",
     "filename": "history/report_20260611_162009.html",
     "json_file": "history/report_20260611_162009.json",

@@ -117,7 +117,11 @@ def _load_model_registry() -> Dict[str, Dict[str, Any]]:
 
 
 MODEL_REGISTRY: Dict[str, Dict[str, Any]] = _load_model_registry()
-DEFAULT_MODEL: str = os.environ.get("AI_DEFAULT_MODEL", "glm-5.1")
+DEFAULT_MODEL: str = (
+    os.environ.get("AI_MODEL", "")
+    or os.environ.get("AI_DEFAULT_MODEL", "")
+    or "glm-5.1"
+)
 
 
 class AIProvider(ABC):
@@ -247,15 +251,27 @@ class OpenAICompatibleProvider(AIProvider):
     # API 调用（Anthropic Messages 协议）
 
     def _call_api(self, prompt: str, temperature: float = 0.3) -> str:
-        """调用 Anthropic Messages API
+        """调用 OpenAI 兼容 Chat Completions API
 
-        Anthropic 协议：
-          POST /v1/messages
-          Header: x-api-key + anthropic-version
-          Body: { model, messages, max_tokens }
-          Response: { content: [{type: "text", text: "..."}] }
+        OpenAI 兼容协议：
+          POST {base_url}/chat/completions
+          Header: Authorization: Bearer + Content-Type
+          Body: { model, messages, max_tokens, temperature }
+          Response: { choices: [{message: {content: "..."}}] }
         """
-        url = self.base_url.rstrip("/")
+        # 统一读取 AI 配置，支持新旧变量名
+        ai_key = (
+            os.environ.get("AI_API_KEY", "")
+            or os.environ.get("ANTHROPIC_AUTH_TOKEN", "")
+            or getattr(self, "api_key", "")
+        )
+        ai_base = (
+            os.environ.get("AI_BASE_URL", "")
+            or os.environ.get("OPENAI_COMPAT_BASE_URL", "")
+            or "https://ai-platform.cai-inc.com/api/biz-ai/ai-model/api/11/compatible-mode/v1"
+        )
+
+        url = f"{ai_base.rstrip('/')}/chat/completions"
 
         data = {
             "model": self.model_id,
@@ -265,8 +281,7 @@ class OpenAICompatibleProvider(AIProvider):
         }
         headers = {
             "Content-Type": "application/json",
-            "x-api-key": self.api_key,
-            "anthropic-version": "2023-06-01",
+            "Authorization": f"Bearer {ai_key}",
         }
 
         req = urllib.request.Request(
@@ -277,10 +292,10 @@ class OpenAICompatibleProvider(AIProvider):
         )
         with urllib.request.urlopen(req, timeout=120) as response:
             result = json.loads(response.read().decode("utf-8"))
-            # Anthropic 响应格式: { content: [{type: "text", text: "..."}] }
-            content_blocks = result.get("content", [])
-            if content_blocks:
-                return content_blocks[0].get("text", "")
+            # OpenAI 响应格式: { choices: [{message: {content: "..."}}] }
+            choices = result.get("choices", [])
+            if choices:
+                return choices[0].get("message", {}).get("content", "")
             return str(result)
 
     # Prompt 构建

@@ -663,52 +663,101 @@ class RepairExecutor:
                 message="需要人工修改脚本",
             )
 
-    def _patch_via_healer(self, params: Dict, entry: FailureEntry) -> RepairResult:
-        # 通过 playwright-healer 修复选择器
+    def _patch_via_five_tier_engine(self, params: Dict, entry: FailureEntry) -> RepairResult:
+        """通过五层自愈引擎修复选择器（替代 playwright-healer）"""
         selector = params.get("selector", "")
         page_url = params.get("page_url", "")
         file_path = params.get("file", "")
+        action = params.get("action", "")
+        error_message = params.get("error_message", "")
 
         if not selector:
             return RepairResult(
                 strategy=RepairStrategy.PATCH_SCRIPT, success=False,
-                message="选择器为空，无法调用 healer",
+                message="选择器为空，无法调用自愈引擎",
             )
 
-        # 调用 healer pipeline
         try:
-            healed = self._call_healer_direct(selector, page_url)
-            if healed and healed != selector:
-                # 修改healer
+            from self_healing.pipeline import HealingPipeline
+            from playwright.sync_api import sync_playwright
+
+            # P2: 复用登录守卫，确保登录态有效
+            try:
+                from login.refresh_login_state import ensure_valid_login_state
+                login_ok = ensure_valid_login_state()
+                if not login_ok:
+                    logger.warning("登录态刷新失败，自愈引擎可能在未登录状态下执行")
+            except Exception as e:
+                logger.warning("登录守卫调用失败: %s，继续尝试使用现有登录态", e)
+
+            with sync_playwright() as p:
+                browser = p.chromium.launch(headless=True, args=["--no-sandbox", "--ignore-certificate-errors"])
+                storage_state_path = str(self.project_root / "login_state" / "storage_state.json")
+                context_args = {"viewport": {"width": 1366, "height": 768}, "ignore_https_errors": True}
+                if os.path.exists(storage_state_path):
+                    context_args["storage_state"] = storage_state_path
+                context = browser.new_context(**context_args)
+                page = context.new_page()
+
+                if page_url and page_url != "about:blank":
+                    try:
+                        page.goto(page_url, wait_until="domcontentloaded", timeout=30000)
+                        page.wait_for_timeout(3000)
+                    except Exception as e:
+                        logger.warning("导航失败: %s", e)
+
+                cache_dir = str(self.project_root / "output" / "heal_cache")
+                pipeline = HealingPipeline(page, cache_dir=cache_dir)
+                result = pipeline.heal(selector, action=action, page_url=page_url, error_message=error_message)
+
+                browser.close()
+
+            if result.success:
+                from self_healing.source_patcher import SourcePatcher
                 if file_path and os.path.exists(file_path):
-                    success = self._patch_file(file_path, selector, healed)
+                    success = SourcePatcher.patch_file(file_path, selector, result.healed_selector)
                     return RepairResult(
                         strategy=RepairStrategy.PATCH_SCRIPT,
                         success=success,
                         old_value=selector,
-                        new_value=healed,
+                        new_value=result.healed_selector,
                         file_patched=file_path,
-                        message=f"healer 修复: {selector!r} → {healed!r}" if success else "回写失败",
+                        message=f"五层引擎修复({result.strategy_name}): {selector!r} → {result.healed_selector!r}" if success else "回写失败",
                     )
                 return RepairResult(
                     strategy=RepairStrategy.PATCH_SCRIPT, success=False,
-                    old_value=selector, new_value=healed or "",
-                    message="healer 找到新选择器但源文件不可达",
+                    old_value=selector, new_value=result.healed_selector,
+                    message="引擎修复成功但源文件不可达",
                 )
             else:
+                fail_reason = (
+                    f"置信度不足({result.confidence:.2f})"
+                    if result.confidence > 0
+                    else "所有策略均未找到有效候选"
+                )
                 return RepairResult(
                     strategy=RepairStrategy.PATCH_SCRIPT, success=False,
                     old_value=selector,
-                    message="healer 未能修复此选择器",
+                    message=f"五层引擎未能修复: {fail_reason}",
                 )
         except Exception as e:
             return RepairResult(
                 strategy=RepairStrategy.PATCH_SCRIPT, success=False,
-                message=f"healer 调用异常: {e}",
+                message=f"五层引擎调用异常: {e}",
             )
 
+    # 向后兼容别名：旧代码中 _patch_via_healer 仍可用
+    _patch_via_healer = _patch_via_five_tier_engine
+
     def _call_healer_direct(self, selector: str, page_url: str) -> Optional[str]:
-        # 直接调用 healer pipeline（绕过 conftest.py 的 pytest 依赖）
+        # 【已废弃】请使用 _patch_via_five_tier_engine 替代
+        # 保留此方法以防止外部调用方直接引用时报错
+        import warnings
+        warnings.warn(
+            "_call_healer_direct 已废弃，请使用 _patch_via_five_tier_engine",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         import asyncio
 
         async def _heal():
@@ -1020,6 +1069,31 @@ class RepairExecutor:
             strategy=RepairStrategy.ENV_FIX, success=False,
             message=f"网络重试 {max_retries} 次均失败",
         )
+
+    def _load_dom_schema(self, entry: FailureEntry) -> Optional[Dict[str, Any]]:
+        """加载 DOM Schema 供自愈引擎使用
+
+        优先从 entry.metadata 中读取，其次从输出目录查找对应页面的 DOM 快照。
+        """
+        # 1. 尝试从 metadata 中获取
+        if entry.metadata and "dom_schema" in entry.metadata:
+            return entry.metadata["dom_schema"]
+
+        # 2. 尝试从输出目录查找 DOM 快照文件
+        dom_dir = self.project_root / "output" / "dom_snapshots"
+        if dom_dir.exists():
+            # 尝试根据 page_url 匹配
+            import hashlib
+            url_hash = hashlib.md5(entry.page_url.encode()).hexdigest() if entry.page_url else ""
+            if url_hash:
+                dom_file = dom_dir / f"{url_hash}.json"
+                if dom_file.exists():
+                    try:
+                        return json.loads(dom_file.read_text(encoding="utf-8"))
+                    except Exception as e:
+                        logger.warning("DOM Schema 加载失败: %s", e)
+
+        return None
 
     @staticmethod
     def _patch_file(file_path: str, old_text: str, new_text: str) -> bool:

@@ -1,0 +1,100 @@
+classDiagram
+    class MonkeyPatchPage {
+        -_page: Page
+        +get_by_role(role, **kwargs) HealingLocator
+        +get_by_text(text, **kwargs) HealingLocator
+        +get_by_label(label, **kwargs) HealingLocator
+        +locator(selector, **kwargs) HealingLocator
+        +__getattr__(name) Any
+    }
+
+    class HealingLocator {
+        -_locator: Locator
+        -_selector: str
+        -_page: Page
+        +nth(index) HealingLocator
+        +first: HealingLocator
+        +last: HealingLocator
+        +filter(**kwargs) HealingLocator
+        +click(**kwargs) void
+        +fill(value, **kwargs) void
+        +check(**kwargs) void
+        +__getattr__(name) Any
+        -_make_safe_action(name, method) Callable
+    }
+
+    class LocatorActionError {
+        +action: str
+        +selector: str
+        +page_url: str
+        +original_error: Exception
+        +description: str
+    }
+
+    class SelectorExpr {
+        +method: str
+        +args: tuple
+        +kwargs: dict
+        +chain: list~ChainItem~
+        +raw: str
+        +base_selector: str
+        +chain_suffix: str
+    }
+
+    class ChainItem {
+        +method: str
+        +args: tuple
+        +kwargs: dict
+    }
+
+    class ChainHealingPipeline {
+        +heal(page, selector, action, page_url, description) ChainHealingResult
+        -_call_healer(page, selector, description, url, action) HealingResult?
+        -_try_nth_offset(page, parsed, action, url) ChainHealingResult?
+        -_ai_fallback(page, parsed, action, url) ChainHealingResult?
+        -_rechain(healed_base, chain_suffix) str
+        -_verify_on_page(page, full_selector, action) bool
+    }
+
+    class AIFallbackHealer {
+        +api_key: str
+        +base_url: str
+        +model: str
+        +try_heal(page, parsed, action, page_url) AIFallbackResult
+        -_build_prompt(parsed, action, url, title, dom) str
+        -_call_ai(prompt) str
+        -_parse_response(response) str
+        -_verify_on_page(page, selector, action) bool
+    }
+
+    class SourcePatcher {
+        +patch_file(file_path, old_selector, new_selector) bool$
+        -_string_replace(file_path, source, old, new) bool$
+        -_fuzzy_string_replace(file_path, source, old_parsed, new_parsed) bool$
+        -_ast_replace(file_path, source, old_parsed, new_parsed) bool$
+    }
+
+    class ChainHealingResult {
+        +success: bool
+        +healed_selector: str
+        +base_healed_selector: str
+        +strategy: str
+        +confidence: float
+        +detail: str
+    }
+
+    class AIFallbackResult {
+        +success: bool
+        +healed_selector: str
+        +strategy: str
+        +confidence: float
+        +detail: str
+    }
+
+    MonkeyPatchPage --> HealingLocator : creates
+    HealingLocator --> LocatorActionError : raises
+    ChainHealingPipeline --> ChainHealingResult : returns
+    ChainHealingPipeline ..> SelectorExpr : parses
+    ChainHealingPipeline --> AIFallbackHealer : AI fallback
+    AIFallbackHealer --> AIFallbackResult : returns
+    SourcePatcher ..> SelectorExpr : parses

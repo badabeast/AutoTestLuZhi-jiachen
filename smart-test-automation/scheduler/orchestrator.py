@@ -125,24 +125,94 @@ class TestChainOrchestrator:
             results.append(module_result)
 
             if not module_result["success"]:
-                print(f"❌ 模块 {step.module_id} 执行失败")
-                break
+                # P0 #1: 检查自动修复是否成功
+                healed = self._check_heal_result(step.module_id)
+                if healed:
+                    module_result["success"] = True
+                    module_result["healed"] = True
+                    module_result["healed_selectors"] = healed
+                    print(f"🩹 模块 {step.module_id} 自愈修复成功，继续执行后续模块")
+                else:
+                    print(f"❌ 模块 {step.module_id} 执行失败")
+                    break
 
             # 保存提取的变量
             self.resolver.extract_from_module_result(
                 step.module_id, str(self.output_base)
             )
 
+            # 执行 API 层断言（基于 HAR 数据）
+            try:
+                from assertion.engine import ThreeLayerAssertionEngine
+                from assertion.assertion_rule import AssertionResult, AssertionStatus
+                from recorder.har_parser import HARParser
+
+                module_dir = self.output_base / step.module_id
+                har_path = module_dir / "api.har"
+
+                if har_path.exists():
+                    har_parser = HARParser()
+                    api_calls = har_parser.parse_api_sequence(str(har_path))
+
+                    if api_calls:
+                        engine = ThreeLayerAssertionEngine()
+                        # 构建默认 API 断言：检查所有业务 API 返回 200
+                        api_assertions = []
+                        for call in api_calls:
+                            api_assertions.append({
+                                "layer": "api",
+                                "type": "status",
+                                "description": f"{call.method} {call.path} 返回 200",
+                                "url_pattern": call.path,
+                                "method": call.method,
+                                "expected": 200,
+                            })
+
+                        assertion_results = engine.run_assertions(
+                            api_assertions,
+                            {"api_calls": api_calls}
+                        )
+
+                        # 保存断言报告
+                        assertion_report = engine.generate_report(assertion_results)
+                        report_path = module_dir / "assertion_report.json"
+                        report_path.write_text(
+                            json.dumps(assertion_report, ensure_ascii=False, indent=2, default=str),
+                            encoding='utf-8',
+                        )
+
+                        # 打印断言摘要
+                        passed = sum(1 for r in assertion_results if r.status == AssertionStatus.PASSED)
+                        failed = sum(1 for r in assertion_results if r.status == AssertionStatus.FAILED)
+                        print(f"   📊 API 断言: {passed}/{len(assertion_results)} 通过, {failed} 失败")
+
+                        if failed > 0:
+                            for r in assertion_results:
+                                if r.status == AssertionStatus.FAILED:
+                                    print(f"      ❌ {r.description}: 期望 {r.expected}, 实际 {r.actual}")
+
+                        module_result["assertion_summary"] = {
+                            "total": len(assertion_results),
+                            "passed": passed,
+                            "failed": failed,
+                        }
+            except Exception as e:
+                print(f"   ⚠️ API 断言执行异常: {e}")
+                logger.warning("API 断言执行异常: %s", e)
+
             print(f"✅ 模块 {step.module_id} 执行成功")
 
         # 5. 生成编排报告
         chain_success = all(r.get("success") for r in results)
+        healed_count = sum(1 for r in results if r.get("healed"))
         report = {
             "success": chain_success,
             "target_module": target_module,
             "execution_chain": plan.chain,
             "results": results,
             "variables": self.resolver.context_vars,
+            "assertion_summary": self._aggregate_assertions(results),
+            "healed_count": healed_count,
         }
 
         # 保存报告
@@ -156,6 +226,75 @@ class TestChainOrchestrator:
         print(f"\n📊 编排报告: {report_path}")
 
         return report
+
+    def _aggregate_assertions(self, results: list) -> dict:
+        """汇总所有模块的断言结果"""
+        total = 0
+        passed = 0
+        failed = 0
+        for r in results:
+            summary = r.get("assertion_summary", {})
+            total += summary.get("total", 0)
+            passed += summary.get("passed", 0)
+            failed += summary.get("failed", 0)
+        return {
+            "total": total,
+            "passed": passed,
+            "failed": failed,
+            "success": failed == 0,
+        }
+
+    def _check_heal_result(self, module_id: str) -> Optional[List[Dict[str, str]]]:
+        """检查 heal_report.json 判断自动修复是否成功
+
+        方案A: 子进程 pytest 结束后，conftest 的 pytest_sessionfinish hook
+        会触发 strategy repair，若修复成功会回写源码并记录到 heal_log.json。
+        同时 heal_report.json 的 failure 条目保存了失败现场。
+
+        本方法通过读取 heal_log.json（修复日志）判断是否有成功修复条目。
+
+        Args:
+            module_id: 模块标识
+
+        Returns:
+            成功修复的选择器列表 [{old, new}]，或 None
+        """
+        # 1. 检查 heal_log.json（strategy repair 在 sessionfinish 中写入）
+        heal_log_path = Path("output") / "heal_log.json"
+        if heal_log_path.exists():
+            try:
+                with open(heal_log_path, "r", encoding="utf-8") as f:
+                    logs = json.load(f)
+                if isinstance(logs, list):
+                    healed = [
+                        {"old": entry.get("old_selector", ""),
+                         "new": entry.get("new_selector", "")}
+                        for entry in logs
+                        if entry.get("success") and entry.get("new_selector")
+                    ]
+                    if healed:
+                        logger.info("检测到 %d 条成功修复记录", len(healed))
+                        return healed
+            except Exception as e:
+                logger.warning("读取 heal_log.json 失败: %s", e)
+
+        # 2. 回退检查 heal_report.json 的 archive 目录
+        archive_dir = Path("output") / "archive"
+        if archive_dir.exists():
+            try:
+                archive_files = sorted(archive_dir.glob("heal_report_*.json"), reverse=True)
+                if archive_files:
+                    with open(archive_files[0], "r", encoding="utf-8") as f:
+                        report = json.load(f)
+                    # heal_report 本身记录的是失败现场，无法直接判断修复是否成功
+                    # 但如果 strategy repair 流程正常走完，heal_log.json 应该存在
+                    # 此处仅作兜底日志
+                    failures = report.get("failures", [])
+                    logger.info("归档报告包含 %d 条失败记录（仅供参考）", len(failures))
+            except Exception:
+                pass
+
+        return None
 
     def _resolve_script_path(self, module_id: str) -> Optional[str]:
         """查找模块的可执行脚本"""
@@ -203,11 +342,20 @@ class TestChainOrchestrator:
             ])
 
         try:
+            # P0 #2: 传入向后兼容的 healer 环境变量
+            env = os.environ.copy()
+            try:
+                from self_healing.healer_config import get_healer_env_vars
+                env.update(get_healer_env_vars())
+            except Exception:
+                logger.warning("healer_config.get_healer_env_vars() 导入失败，子进程可能缺少 AI 配置")
+
             result = subprocess.run(
                 cmd,
                 capture_output=True,
                 text=True,
                 timeout=300,
+                env=env,
             )
             success = result.returncode == 0
             logger.info("模块执行 %s: returncode=%d", script_path, result.returncode)

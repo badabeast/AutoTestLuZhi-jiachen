@@ -280,18 +280,26 @@ def run_healer_sync(
     from playwright_healer.config import HealerConfig, HealingStrategy
     from playwright_healer.ai_providers import AIProviderConfig, AIProvider
 
-    # 构建 healer 配置
-    ai_key = os.environ.get("ANTHROPIC_AUTH_TOKEN", "")
-    api_url = os.environ.get(
-        "ZCY_HEALER_API_URL",
-        "https://ai-platform.cai-inc.com/api/biz-ai/ai-model/api/11/apps/anthropic/v1/messages"
+    # 构建 healer 配置（统一使用 AI_API_KEY / AI_BASE_URL / AI_MODEL）
+    ai_key = (
+        os.environ.get("AI_API_KEY", "")
+        or os.environ.get("ANTHROPIC_AUTH_TOKEN", "")
     )
-    model = os.environ.get("ZCY_HEALER_MODEL", "glm-5.1")
+    api_url = (
+        os.environ.get("AI_BASE_URL", "")
+        or os.environ.get("ZCY_HEALER_API_URL", "")
+        or "https://ai-platform.cai-inc.com/api/biz-ai/ai-model/api/11/compatible-mode/v1"
+    )
+    model = (
+        os.environ.get("AI_MODEL", "")
+        or os.environ.get("ZCY_HEALER_MODEL", "")
+        or "glm-5.1"
+    )
 
     config = HealerConfig(
         providers=[
             AIProviderConfig(
-                provider=AIProvider.ANTHROPIC,
+                provider=AIProvider.OPENAI,
                 api_key=ai_key,
                 model=model,
                 api_url=api_url,

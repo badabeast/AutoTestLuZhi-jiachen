@@ -1,0 +1,91 @@
+classDiagram
+    class ComponentLibraryProfile {
+        +name: str
+        +display_name: str
+        +version: str
+        +detect_patterns: list~DetectPattern~
+        +locator_priorities: list~str~
+        +attribute_mappings: list~AttributeMapping~
+        +stable_class_regex: list~str~
+        +ignore_class_regex: list~str~
+        +shadow_dom: bool
+        +nested_structure: str
+        +confidence_modifier: float
+        +from_dict(d: dict) ComponentLibraryProfile$
+    }
+
+    class DetectPattern {
+        +type: DetectPatternType
+        +value: str
+        +weight: float
+        +description: str
+    }
+
+    class DetectPatternType {
+        <<enumeration>>
+        CLASS_PREFIX
+        ATTRIBUTE
+        DOM_STRUCTURE
+        META_TAG
+    }
+
+    class AttributeMapping {
+        +attribute: str
+        +semantic: str
+        +priority_boost: float
+    }
+
+    class ComponentLibraryDetector {
+        +DETECTION_THRESHOLD: float
+        +detect(page_or_schema) list~str~
+        -_detect_from_schema(schema) list~str~
+        -_detect_from_page(page) list~str~
+        -_vote(all_classes, all_attrs) list~str~
+    }
+
+    class ComponentLibraryManager {
+        +BUILTIN_PROFILES_DIR: Path
+        +CUSTOM_PROFILES_DIR: Path
+        +get_profile(name) ComponentLibraryProfile?
+        +list_profiles() list~ComponentLibraryProfile~
+        +get_active_profiles(detected) list~ComponentLibraryProfile~
+        +reload() void
+    }
+
+    class FiveTierPipeline {
+        +config: PipelineConfig
+        +confidence_threshold: float
+        +apply_component_profiles(profiles) void
+        +heal(page, selector, action, page_url, dom_schema) HealingResult
+    }
+
+    class SemanticLocatorGenerator {
+        +DEFAULT_PRIORITY_WEIGHTS: dict
+        +apply_profiles(profiles) void
+        +try_generate(page, parsed, action, dom_schema) HealingResult?
+    }
+
+    class DynamicAttrFilterMatcher {
+        +DEFAULT_DYNAMIC_PATTERNS: dict
+        +apply_profiles(profiles) void
+        +try_match(page, parsed, action, dom_schema) HealingResult?
+    }
+
+    class DOMTopologyMatcher {
+        +DEFAULT_WEIGHTS: dict
+        +apply_profiles(profiles) void
+        +try_match(page, parsed, action, dom_schema) HealingResult?
+    }
+
+    ComponentLibraryProfile --> DetectPattern : contains
+    ComponentLibraryProfile --> AttributeMapping : contains
+    DetectPattern --> DetectPatternType : type
+    ComponentLibraryDetector --> ComponentLibraryManager : reads profiles
+    FiveTierPipeline --> ComponentLibraryDetector : uses
+    FiveTierPipeline --> ComponentLibraryManager : uses
+    FiveTierPipeline --> SemanticLocatorGenerator : L2
+    FiveTierPipeline --> DynamicAttrFilterMatcher : L3
+    FiveTierPipeline --> DOMTopologyMatcher : L4
+    SemanticLocatorGenerator ..> ComponentLibraryProfile : reads priorities
+    DynamicAttrFilterMatcher ..> ComponentLibraryProfile : reads regex
+    DOMTopologyMatcher ..> ComponentLibraryProfile : reads structure

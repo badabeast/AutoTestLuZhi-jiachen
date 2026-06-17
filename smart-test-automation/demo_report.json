@@ -1,0 +1,121 @@
+{
+  "demo_time": "2026-06-17T19:43:21",
+  "total_scenarios": 10,
+  "passed": 10,
+  "failed": 0,
+  "features_demonstrated": [
+    "1. PO联动自愈映射机制 (MonkeyPatchPage)",
+    "2. 五层递进式规则自愈引擎 (L1-L5)",
+    "3. 多策略元素定位竞争排序",
+    "4. 局部DOM裁剪AI优化 (DOMTrimmer)",
+    "5. 临时自愈+源码永久固化双闭环 (SourcePatcher)",
+    "6. 静态AST预扫描前置修复",
+    "7. 组件库感知自适应定位 (ComponentLibraryProfile)",
+    "8. L0 Strict Violation快速收窄",
+    "9. 多备选定位器池轮询",
+    "10. 时序等待重试",
+    "11. 弹窗遮罩自动排除"
+  ],
+  "scenario_results": [
+    {
+      "id": 1,
+      "name": "PO联动 + 五层引擎",
+      "status": "PASS",
+      "original_selector": "get_by_role(\"textbox\", name=\"请输入\").nth(1)",
+      "healed_selector": "get_by_role(\"textbox\", name=\"需求单名称\").nth(1)",
+      "strategy": "L2 Semantic",
+      "confidence": 0.85,
+      "details": "MonkeyPatchPage拦截→conftest采集→L1未命中→L2语义命中（name='请输入'→name='需求单名称'）"
+    },
+    {
+      "id": 2,
+      "name": "Strict Violation L0快速收窄",
+      "status": "PASS",
+      "original_selector": "get_by_text(\"展开\")",
+      "healed_selector": "locator(\"form\").get_by_text(\"展开\")",
+      "strategy": "L0 Strict Violation",
+      "confidence": 1.0,
+      "details": "解析Playwright错误中的aka提示，提取locator(\"form\").get_by_text(\"展开\")作为收窄选择器"
+    },
+    {
+      "id": 3,
+      "name": "多策略元素定位竞争",
+      "status": "PASS",
+      "original_selector": "get_by_role(\"textbox\", name=\"需求单名称\")",
+      "healed_selector": "get_by_role(\"textbox\", name=\"需求单名称\")",
+      "strategy": "多策略竞争排序",
+      "confidence": 0.99,
+      "details": "4个候选竞争: cache(0.99) > semantic(0.85) > dynamic(0.71) > ai(0.62), 取cache方案"
+    },
+    {
+      "id": 4,
+      "name": "DOM裁剪AI优化",
+      "status": "PASS",
+      "original_selector": "DOM全文",
+      "healed_selector": "裁剪后DOM(260 tokens)",
+      "strategy": "DOMTrimmer",
+      "confidence": 0.94,
+      "details": "原始 1127 tokens → 裁剪后 260 tokens, 压缩率 23.1%"
+    },
+    {
+      "id": 5,
+      "name": "临时自愈+源码永久固化双闭环",
+      "status": "PASS",
+      "original_selector": "get_by_role(\"textbox\", name=\"请输入\").nth(1)",
+      "healed_selector": "get_by_role(\"textbox\", name=\"需求单名称\").nth(1)",
+      "strategy": "SourcePatcher AST精准回写",
+      "confidence": 0.85,
+      "details": "运行时HealingLocator临时替换→pytest_sessionfinish时SourcePatcher AST精准回写永久修复"
+    },
+    {
+      "id": 6,
+      "name": "静态AST预扫描",
+      "status": "PASS",
+      "original_selector": "代码中的不稳定定位器",
+      "healed_selector": "语义定位器 + data-testid",
+      "strategy": "AST预扫描检测",
+      "confidence": 1.0,
+      "details": "扫描发现3个不稳定定位器：绝对XPath、nth-child固定下标、随机hash class、随机id"
+    },
+    {
+      "id": 7,
+      "name": "组件库感知自适应定位",
+      "status": "PASS",
+      "original_selector": "locator(\".ant-select\")",
+      "healed_selector": "get_by_role(\"combobox\", name=\"优先级\")",
+      "strategy": "组件库档案驱动优先级",
+      "confidence": 0.9,
+      "details": "Ant Design环境下，优先使用combobox role定位，替代不稳定的.ant-select CSS选择器"
+    },
+    {
+      "id": 8,
+      "name": "多备选定位器池",
+      "status": "PASS",
+      "original_selector": "get_by_role(\"button\", name=\"登录\")",
+      "healed_selector": "locator('[data-test=\"login-btn\"]')",
+      "strategy": "备选定位器轮询",
+      "confidence": 0.8,
+      "details": "首选超时→自动切换备选1[data-test=\"login-btn\"]→命中→缓存为新首选"
+    },
+    {
+      "id": 9,
+      "name": "时序等待重试",
+      "status": "PASS",
+      "original_selector": "get_by_role(\"row\", name=\"REQ-001\")",
+      "healed_selector": "get_by_role(\"row\", name=\"REQ-001\") (+wait_for)",
+      "strategy": "时序等待重试",
+      "confidence": 0.95,
+      "details": "第1次Timeout→分析为异步加载→wait_for(2.3s)→第2次成功定位"
+    },
+    {
+      "id": 10,
+      "name": "弹窗遮罩自动排除",
+      "status": "PASS",
+      "original_selector": "get_by_role(\"button\", name=\"提交\")",
+      "healed_selector": "get_by_role(\"button\", name=\"提交\") (+mask_dismissal)",
+      "strategy": "弹窗遮罩自动排除",
+      "confidence": 0.88,
+      "details": "检测到.div-mask遮罩→隐藏遮罩→重新点击→成功"
+    }
+  ]
+}

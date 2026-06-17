@@ -1,0 +1,120 @@
+classDiagram
+    class MonkeyPatchPage {
+        -_page: Page
+        -_selector_stack: list~str~
+        +get_by_role(role, **kwargs) HealingLocator
+        +get_by_text(text, **kwargs) HealingLocator
+        +get_by_label(label, **kwargs) HealingLocator
+        +locator(selector, **kwargs) HealingLocator
+        +__getattr__(name) Any
+    }
+
+    class HealingLocator {
+        -_locator: Locator
+        -_selector: str
+        -_page: Page
+        +nth(index) HealingLocator
+        +first: HealingLocator
+        +last: HealingLocator
+        +filter(**kwargs) HealingLocator
+        +click(**kwargs) void
+        +fill(value, **kwargs) void
+        +check(**kwargs) void
+        +__getattr__(name) Any
+        -_make_safe_action(name, method) Callable
+    }
+
+    class LocatorActionError {
+        +action: str
+        +selector: str
+        +page_url: str
+        +original_error: Exception
+        +description: str
+    }
+
+    class SelectorExpr {
+        +method: str
+        +args: tuple
+        +kwargs: dict
+        +chain: list~ChainItem~
+        +raw: str
+    }
+
+    class ChainItem {
+        +method: str
+        +args: tuple
+        +kwargs: dict
+    }
+
+    class HealingPipeline {
+        -page: Page
+        -config: HealingConfig
+        -mutator: SelectorMutator
+        -dom_matcher: DOMFuzzyMatcher
+        -ai_healer: AISelectorHealer
+        +heal(selector, action, page_url) HealingResult
+    }
+
+    class SelectorMutator {
+        +try_mutate(page, parsed, action) HealingResult
+        -_generate_candidates(parsed) list~SelectorExpr~
+        -_build_locator(page, candidate) Locator
+        -_verify_action(locator, action) bool
+    }
+
+    class DOMFuzzyMatcher {
+        +try_match(page, parsed, action, page_url) HealingResult
+        -_get_dom_snapshot(page) str
+        -_match_by_role(page, parsed, dom) HealingResult
+        -_match_by_text(page, parsed, dom) HealingResult
+        -_match_by_css(page, parsed, dom) HealingResult
+    }
+
+    class AISelectorHealer {
+        -provider: OpenAICompatProvider
+        +try_heal(page, parsed, action, page_url) HealingResult
+        -_build_healing_prompt(parsed, action, context) str
+        -_parse_ai_response(response) str
+        -_verify_on_page(page, healed, action) bool
+    }
+
+    class OpenAICompatProvider {
+        +healing_base_url: str
+        +healing_model: str
+        +chat(prompt, temperature) str
+        -_call_api(url, data, headers) str
+    }
+
+    class HealingResult {
+        +success: bool
+        +healed_selector: str
+        +strategy: str
+        +confidence: float
+    }
+
+    class SourcePatcher {
+        +patch_file(file_path, old_selector, new_selector) bool$
+        -_string_replace(file_path, source, old, new) bool$
+        -_ast_replace(file_path, source, old, new) bool$
+    }
+
+    class HealingConfig {
+        +ai_base_url: str
+        +ai_model: str
+        +ai_api_key: str
+        +enable_l1: bool
+        +enable_l2: bool
+        +enable_l3: bool
+        +auto_patch_source: bool
+        +from_env() HealingConfig$
+    }
+
+    MonkeyPatchPage --> HealingLocator : creates
+    HealingLocator --> LocatorActionError : raises
+    HealingPipeline --> SelectorMutator : L1
+    HealingPipeline --> DOMFuzzyMatcher : L2
+    HealingPipeline --> AISelectorHealer : L3
+    AISelectorHealer --> OpenAICompatProvider : uses
+    HealingPipeline --> HealingResult : returns
+    SourcePatcher ..> SelectorExpr : parses
+    OpenAICompatProvider ..> HealingConfig : configured by

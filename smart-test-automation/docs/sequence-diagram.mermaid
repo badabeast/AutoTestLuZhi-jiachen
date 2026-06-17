@@ -1,0 +1,60 @@
+sequenceDiagram
+    participant Test as pytest 测试用例
+    participant MPP as MonkeyPatchPage
+    participant HL as HealingLocator
+    participant Page as sync Page
+    participant LAE as LocatorActionError
+    participant Conf as conftest.py
+    participant FC as FailureClassifier
+    participant SDE as StrategyDecisionEngine
+    participant RE as RepairExecutor
+    participant HP as HealingPipeline
+    participant SM as SelectorMutator
+    participant DM as DOMFuzzyMatcher
+    participant AIH as AISelectorHealer
+    participant OAI as OpenAICompatProvider
+    participant SP as SourcePatcher
+
+    Test->>MPP: page.get_by_role("textbox", name="需求单名称")
+    MPP->>Page: _page.get_by_role(...)
+    Page-->>MPP: Locator
+    MPP-->>Test: HealingLocator(selector="get_by_role(...)", ...)
+
+    Test->>HL: .fill("自动测试需求单")
+    HL->>Page: _locator.fill("自动测试需求单")
+    Page-->>HL: TimeoutError / Error
+    HL->>LAE: raise LocatorActionError(action="fill", selector="get_by_role(...)")
+
+    LAE-->>Conf: pytest_runtest_makereport 捕获
+    Conf->>Conf: 写入 heal_report.json
+
+    Note over Conf: 测试 session 结束
+
+    Conf->>FC: classify(entry)
+    FC-->>Conf: FailureCategory.LOCATOR_TIMEOUT
+
+    Conf->>SDE: decide(entry)
+    SDE-->>Conf: RepairDecision(PATCH_SCRIPT)
+
+    Conf->>RE: execute_with_fallback(decision, entry)
+    RE->>HP: heal(selector, action, page_url)
+
+    Note over HP: L1 尝试
+    HP->>SM: try_mutate(page, parsed, action)
+    SM->>Page: page.get_by_role("textbox", name="需求单名称", exact=False)
+    Page-->>SM: TimeoutError
+    SM-->>HP: HealingResult(success=False)
+
+    Note over HP: L2 尝试
+    HP->>DM: try_match(page, parsed, action, page_url)
+    DM->>Page: page.get_by_role("textbox").count()
+    Page-->>DM: count=3
+    DM->>Page: 遍历元素，rapidfuzz 匹配 name
+    DM->>Page: page.get_by_role("textbox").nth(2).is_visible()
+    Page-->>DM: True, score=0.92
+    DM-->>HP: HealingResult(success=True, healed_selector="get_by_role('textbox').nth(2)")
+
+    HP-->>RE: HealingResult(success=True)
+    RE->>SP: patch_file(file_path, old_selector, new_selector)
+    SP-->>RE: True
+    RE-->>Conf: RepairResult(success=True)

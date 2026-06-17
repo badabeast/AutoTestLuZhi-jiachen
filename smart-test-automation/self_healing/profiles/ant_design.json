@@ -1,0 +1,36 @@
+{
+  "name": "ant_design",
+  "display_name": "Ant Design",
+  "version": "4.x/5.x",
+  "detect_patterns": [
+    {"type": "class_prefix", "value": "ant-", "weight": 1.0, "description": "Ant Design CSS class 前缀"},
+    {"type": "attribute", "value": "data-rc-order", "weight": 0.5, "description": "Ant Design 5.x 动态样式标记"}
+  ],
+  "locator_priorities": [
+    "data-testid",
+    "aria-label",
+    "role+name",
+    "ant_component_role",
+    "css_stable",
+    "text"
+  ],
+  "attribute_mappings": [
+    {"attribute": "data-testid", "semantic": "测试标识", "priority_boost": 0.0},
+    {"attribute": "aria-label", "semantic": "无障碍标签", "priority_boost": 0.0}
+  ],
+  "stable_class_regex": [
+    "ant-btn(-[a-z]+)*",
+    "ant-input(-[a-z]+)*",
+    "ant-select(-[a-z]+)*",
+    "ant-form-item(-[a-z]+)*",
+    "ant-table(-[a-z]+)*",
+    "ant-modal(-[a-z]+)*"
+  ],
+  "ignore_class_regex": [
+    "css-[a-z0-9]+",
+    "ant-[a-z]+-[a-f0-9]{6,}"
+  ],
+  "shadow_dom": false,
+  "nested_structure": "standard",
+  "confidence_modifier": 1.0
+}

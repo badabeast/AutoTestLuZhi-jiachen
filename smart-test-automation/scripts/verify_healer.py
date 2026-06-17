@@ -149,7 +149,7 @@ async def main():
         return True
     else:
         print("\n❌ healer + AI 平台 连通性验证失败!")
-        print("   请检查 .env 中的 ANTHROPIC_AUTH_TOKEN 配置")
+        print("   请检查 .env 中的 AI_API_KEY 配置")
         return False
 
 

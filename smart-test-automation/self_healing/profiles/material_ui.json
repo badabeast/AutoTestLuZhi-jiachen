@@ -1,0 +1,30 @@
+{
+  "name": "material_ui",
+  "display_name": "Material UI (MUI)",
+  "version": "5.x",
+  "detect_patterns": [
+    {"type": "class_prefix", "value": "Mui", "weight": 1.0, "description": "MUI CSS class 前缀"},
+    {"type": "attribute", "value": "data-mui-", "weight": 0.8, "description": "MUI data 属性标记"}
+  ],
+  "locator_priorities": [
+    "data-testid",
+    "aria-label",
+    "role+name",
+    "mui_component_role",
+    "css_stable",
+    "text"
+  ],
+  "attribute_mappings": [],
+  "stable_class_regex": [
+    "MuiButton-[a-zA-Z]+",
+    "MuiInputBase-[a-zA-Z]+",
+    "MuiSelect-[a-zA-Z]+"
+  ],
+  "ignore_class_regex": [
+    "MuiButton-root-[a-zA-Z0-9]+",
+    "css-[a-z0-9]+"
+  ],
+  "shadow_dom": false,
+  "nested_structure": "deep_wrapper",
+  "confidence_modifier": 0.95
+}

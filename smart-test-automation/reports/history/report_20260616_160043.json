@@ -1,0 +1,13 @@
+{
+  "title": "智能测试自动化 — 测试报告",
+  "timestamp": "2026-06-16 16:00:43",
+  "duration": 102.04184293746948,
+  "environment": {
+    "project": "smart-test-automation",
+    "team": "QA",
+    "python": "3.14.4",
+    "platform": "macOS-14.1.1-arm64-arm-64bit-Mach-O"
+  },
+  "results": [],
+  "extra": {}
+}

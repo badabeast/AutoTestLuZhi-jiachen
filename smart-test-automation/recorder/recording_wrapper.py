@@ -69,7 +69,8 @@ class TwoStepRecorder:
         # Step 1: codegen 录制
         raw_script = output_dir / "raw_script.py"
         print(f"\n🎬 Step 1: 启动 codegen 录制 [{module_name}]")
-        print(f"   URL: {target_url}")
+        # todo
+        #print(f"   URL: {target_url}")
         if storage_exists:
             print(f"   登录态: {storage_state}")
         else:
@@ -90,7 +91,32 @@ class TwoStepRecorder:
         cmd.append(target_url)
 
         try:
-            result = subprocess.run(cmd, timeout=600)  # 10min 超时自动关闭
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)  # 10min 超时自动关闭
+            # 过滤 codegen 的无害错误（浏览器关闭时的 TargetClosedError）
+            if result.stderr and result.returncode != 0:
+                stderr_lines = result.stderr.split('\n')
+                filtered_errors = []
+                skip_mode = False
+                for line in stderr_lines:
+                    if 'node:internal/process/promises' in line or 'triggerUncaughtException' in line:
+                        skip_mode = True
+                        continue
+                    if skip_mode:
+                        if line.strip() == '' or (not line.startswith(' ') and not line.startswith('[')):
+                            skip_mode = False
+                        continue
+                    if 'TargetClosedError' in line or 'Target page, context or browser has been closed' in line:
+                        continue
+                    if 'Call log:' in line or 'navigating to' in line or 'waiting until' in line:
+                        continue
+                    if line.strip() and not line.strip().startswith('^') and not line.strip().startswith(']'):
+                        filtered_errors.append(line)
+                
+                # 如果还有其他错误，打印出来
+                if filtered_errors:
+                    print(f"   ⚠️ codegen 警告:")
+                    for line in filtered_errors[-5:]:
+                        print(f"      {line}")
         except subprocess.TimeoutExpired:
             print(f"\n⏰ 录制超时（10分钟），自动关闭浏览器")
             # 超时后浏览器进程已被终止，检查是否有产出
@@ -146,14 +172,15 @@ class TwoStepRecorder:
         pytest_cmd = [
             sys.executable, "-m", "pytest",
             str(wrapper_path),
-            "-x", "-v",
+            "-x", "-v", "-s",  # 添加-s以实时输出
+            "-o", "addopts=",  # 清空 pytest.ini 中的全局配置
         ]
 
         step2_result = subprocess.run(
             pytest_cmd,
             capture_output=True,
             text=True,
-            timeout=300,
+            timeout=600,  # 避免复杂页面超时
         )
 
         har_exists = api_har.exists()
@@ -239,6 +266,60 @@ class TwoStepRecorder:
             enhanced_script = None
             po_result = {}
 
+        # Step 5.5: 自动生成 API 断言报告（基于 HAR 数据）
+        if api_calls:
+            try:
+                from assertion.engine import ThreeLayerAssertionEngine
+                from assertion.assertion_rule import AssertionStatus
+
+                engine = ThreeLayerAssertionEngine()
+                api_assertions = []
+                
+                # 智能筛选需要断言的API：优先选择关键业务接口
+                # 排除监控、埋点、静态资源等无关接口
+                skip_patterns = [
+                    '/collect/', '/push/', '/tracking/', '/analytics/',
+                    '/json.htm', '/favicon', '/robots',
+                ]
+                
+                important_apis = []
+                for call in api_calls:
+                    # 跳过无关接口
+                    if any(pattern in call.path.lower() for pattern in skip_patterns):
+                        continue
+                    important_apis.append(call)
+                
+                # 对所有重要的业务API生成断言（不再限制数量）
+                for call in important_apis:
+                    api_assertions.append({
+                        "layer": "api",
+                        "type": "status",
+                        "description": f"{call.method} {call.path} 返回 200",
+                        "url_pattern": call.path,
+                        "method": call.method,
+                        "expected": 200,
+                    })
+
+                assertion_results = engine.run_assertions(
+                    api_assertions, {"api_calls": api_calls}
+                )
+
+                assertion_report = engine.generate_report(assertion_results)
+                assertion_report_path = output_dir / "assertion_report.json"
+                assertion_report_path.write_text(
+                    json.dumps(assertion_report, ensure_ascii=False, indent=2, default=str),
+                    encoding="utf-8",
+                )
+
+                passed = sum(1 for r in assertion_results if r.status == AssertionStatus.PASSED)
+                failed = sum(1 for r in assertion_results if r.status == AssertionStatus.FAILED)
+                print(f"\n📊 API 断言报告: {assertion_report_path}")
+                print(f"   {passed}/{len(assertion_results)} 通过, {failed} 失败")
+            except Exception as e:
+                print(f"   ⚠️ API 断言报告生成失败: {e}")
+        else:
+            print(f"\n⚠️ 无业务 API 数据，跳过断言报告生成")
+
         # Step 6: 打包模块定义，存到 knowledge
         module_def = {
             "module_name": module_name,
@@ -284,7 +365,7 @@ class TwoStepRecorder:
         try:
             from knowledge import save_module_definition
             knowledge_path = save_module_definition(module_name, module_def)
-            print(f"   模块定义: {knowledge_path}")
+            # 转换为相对路径（save_module_definition 内部已有 loguru 日志）
         except Exception as e:
             print(f"   ⚠️ 保存模块定义失败: {e}")
 
@@ -332,6 +413,7 @@ class TwoStepRecorder:
             sys.executable, "-m", "pytest",
             str(wrapper_path),
             "-x", "-v", "-s",
+            "-o", "addopts=",  # 清空 pytest.ini 中的全局配置
         ]
         try:
             result = subprocess.run(
@@ -482,7 +564,7 @@ class TwoStepRecorder:
         def _add_guarded_wait(match):
             goto_line = match.group(1)
             return (goto_line + '\n'
-                    '    page.wait_for_load_state("networkidle")\n'
+                    '    page.wait_for_load_state("domcontentloaded", timeout=15000)\n'
                     '    ensure_logged_in(page, page.url)')
         source = re.sub(r'(\.goto\([^)]+\))', _add_guarded_wait, source)
 
@@ -512,13 +594,27 @@ class TwoStepRecorder:
                 continue
             ids = self._extract_ids_from_response(resp)
             for field_path, value in ids.items():
+                # 过滤掉无意义的短ID和过长的值
+                str_value = str(value)
+                if len(str_value) < 3 or len(str_value) > 200:
+                    continue
+                # 优先保留包含业务含义的字段（如 demand_id, order_no 等）
                 var_name = f"{module_name}_{field_path.replace('.', '_').replace('[', '_').replace(']', '')}"
                 analysis["extract_vars"].append({
                     "name": var_name,
                     "from_api": f"{call.method} {call.path}",
                     "from_field": field_path,
-                    "example_value": str(value)[:100],
+                    "example_value": str_value[:100],
                 })
+        
+        # 限制可提取变量数量，避免过多（最多保留50个最有价值的）
+        if len(analysis["extract_vars"]) > 50:
+            # 按字段名长度排序，优先保留语义明确的字段
+            analysis["extract_vars"] = sorted(
+                analysis["extract_vars"],
+                key=lambda x: len(x["from_field"]),
+                reverse=True
+            )[:50]
 
         # 4b. 从请求体里推断这个模块需要啥外部参数
         for call in api_calls:
@@ -753,9 +849,9 @@ def test_record_with_har():
 
         page = context.new_page()
 
-        # headless 回放可能比较慢
-        page.set_default_timeout(30000)
-        page.set_default_navigation_timeout(60000)
+        # headless 回放可能比较慢，但也不要设太高
+        page.set_default_timeout(15000)
+        page.set_default_navigation_timeout(30000)
 
         # 读取预处理好的脚本
         raw_path = Path("$raw_script_path")

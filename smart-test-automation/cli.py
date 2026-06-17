@@ -104,8 +104,14 @@ def main():
                 from config.accounts import AccountManager
                 project_config = AccountManager.get_project_config(args.project)
                 if project_config:
-                    url = project_config.login_page_url or project_config.base_url
-                    print(f"📌 使用配置文件中的URL ({args.project}): {url}")
+                    # 检查登录态是否存在，决定使用哪个URL
+                    storage_exists = Path(args.storage_state).exists()
+                    if storage_exists:
+                        url = project_config.base_url
+                        print(f"📌 有登录态，使用配置文件中的业务URL")
+                    else:
+                        url = project_config.login_page_url or project_config.base_url
+                        print(f"📌 无登录态，使用配置文件中的登录URL")
                 else:
                     print(f"⚠️ 未找到项目 {args.project} 的配置，请通过 --url 指定")
             except Exception as e:
@@ -273,9 +279,18 @@ def main():
         from scheduler.strategy import FailureRepairOrchestrator, FailureEntry, StrategyDecisionEngine
 
         report_path = args.report
+        # P2: 归档目录回退查找
         if not os.path.exists(report_path):
-            print(f"⚠️ 报告文件不存在: {report_path}")
+            archive_dir = Path("output/archive")
+            if archive_dir.exists():
+                archive_files = sorted(archive_dir.glob("heal_report_*.json"), reverse=True)
+                if archive_files:
+                    report_path = str(archive_files[0])
+                    print(f"📂 默认报告已归档，自动使用最新归档: {report_path}")
+        if not os.path.exists(report_path):
+            print(f"⚠️ 报告文件不存在: {args.report}")
             print(f"   请先运行测试生成失败报告，或指定 --report 路径")
+            print(f"   提示: 报告可能已归档到 output/archive/，可指定 --report output/archive/heal_report_YYYYMMDD_HHMMSS.json")
             sys.exit(1)
 
         if args.dry_run:
@@ -332,18 +347,45 @@ def main():
                     if report_path.exists():
                         report_candidates.append(report_path)
 
+        # P1: 追加修复报告展示
+        heal_log_path = Path("output/heal_log.json")
+        if heal_log_path.exists():
+            report_candidates.append(heal_log_path)
+
         if not report_candidates:
             print("📊 未找到任何报告。请先运行测试: python3 cli.py run <module>")
             sys.exit(1)
 
         for rp in sorted(report_candidates):
             print(f"\n{'='*50}")
-            print(f"📊 报告: {rp}")
+            # 区分报告类型
+            if rp.name == "heal_log.json":
+                print(f"🩹 修复报告: {rp}")
+            else:
+                print(f"📊 报告: {rp}")
             print(f"{'='*50}")
             try:
                 report_data = json.loads(rp.read_text(encoding='utf-8'))
-                summary = report_data.get("summary", {})
-                if "by_layer" in summary:
+                # 修复报告格式：List[Dict]，非标准 report JSON
+                if rp.name == "heal_log.json" and isinstance(report_data, list):
+                    total = len(report_data)
+                    success = sum(1 for e in report_data if e.get("success"))
+                    failed = total - success
+                    print(f"   总计修复: {total}")
+                    print(f"   ✅ 成功: {success}")
+                    print(f"   ❌ 失败: {failed}")
+                    if total > 0:
+                        print(f"   成功率: {success/total:.0%}")
+                    for entry in report_data:
+                        icon = "✅" if entry.get("success") else "❌"
+                        old_sel = entry.get("old_selector", "?")
+                        new_sel = entry.get("new_selector", "")
+                        test_name = entry.get("test_name", "")
+                        if new_sel:
+                            print(f"   {icon} {test_name}: {old_sel!r} → {new_sel!r}")
+                        else:
+                            print(f"   {icon} {test_name}: {old_sel!r} (未修复)")
+                elif "by_layer" in (summary := report_data.get("summary", {})):
                     print(f"   总计: {summary.get('total', '?')}")
                     print(f"   通过: {summary.get('passed', 0)}")
                     print(f"   失败: {summary.get('failed', 0)}")
@@ -352,9 +394,17 @@ def main():
                         print(f"   {layer.upper()}: ✅{counts.get('passed', 0)} ❌{counts.get('failed', 0)} ⏭️{counts.get('skipped', 0)}")
                 elif "results" in report_data:
                     chain = report_data.get("execution_chain", [])
+                    healed_count = report_data.get("healed_count", 0)
                     print(f"   执行链: {' → '.join(chain)}")
+                    if healed_count:
+                        print(f"   🩹 自愈修复模块数: {healed_count}")
                     for r in report_data.get("results", []):
-                        status = "✅" if r.get("success") else "❌"
+                        if r.get("healed"):
+                            status = "🩹"
+                        elif r.get("success"):
+                            status = "✅"
+                        else:
+                            status = "❌"
                         print(f"   {status} {r.get('module', '?')}")
             except Exception as e:
                 print(f"   ⚠️ 读取失败: {e}")

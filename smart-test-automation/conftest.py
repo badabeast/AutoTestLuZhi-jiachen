@@ -27,10 +27,27 @@ load_env()
 
 # 导入通用定位错误异常
 from core.locator_error import LocatorActionError
+# 导入全局错误捕获层
+from self_healing.monkey_patch_page import MonkeyPatchPage
 
 
 # 自愈错误报告文件路径
 HEAL_REPORT_PATH = os.path.join(os.path.dirname(__file__), "output", "heal_report.json")
+
+
+# ── 同步 healing_page fixture ──────────────────────────────────
+# 直接使用 playwright 同步 API，不依赖 asyncio 桥接
+
+@pytest.fixture
+def healing_page(page, healing_config, request):
+    """全局错误捕获层 — 包装 page 为 MonkeyPatchPage
+
+    MonkeyPatchPage 拦截所有定位方法（get_by_role/get_by_text/locator等），
+    返回 HealingLocator 而非原始 Locator，
+    使终端操作失败时自动包装为 LocatorActionError，
+    无需修改业务代码即可实现统一的错误捕获。
+    """
+    return MonkeyPatchPage(page)
 
 
 # LiteReport 截图辅助函数
@@ -233,7 +250,17 @@ def pytest_runtest_makereport(item, call):
             os.makedirs(screenshot_dir, exist_ok=True)
             screenshot_path = f"{screenshot_dir}/{item.name}_failed.png"
             try:
-                page.screenshot(path=screenshot_path)
+                # 兼容 async Page（healing_page 独立创建的 async browser）
+                import asyncio
+                import inspect
+                if hasattr(page, '_page'):
+                    # HealingPage → 取内部 async Page
+                    real_page = page._page
+                else:
+                    real_page = page
+                result = real_page.screenshot(path=screenshot_path)
+                if inspect.isawaitable(result):
+                    asyncio.run(result)
                 print(f"\n[SCREENSHOT] 失败截图已保存: {screenshot_path}")
             except Exception:
                 screenshot_path = ""
@@ -317,13 +344,42 @@ def _collect_locator_errors(item, call, report, screenshot_path: str):
     # 提取文件和行号
     file_path, line_no = _extract_failure_location(call)
 
+    # 提取 selector 信息
+    selector = ""
+    action = ""
+    page_url = ""
+    if locator_error:
+        selector = getattr(locator_error, "selector", "")
+        action = getattr(locator_error, "action", "")
+        page_url = getattr(locator_error, "page_url", "")
+    else:
+        # 尝试从 traceback 中提取 selector
+        tb_text = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+        selector = _extract_selector_from_traceback(tb_text)
+
+    # 如果存在 page fixture 且 page_url 为空，尝试从 fixture 提取
+    if not page_url and "page" in item.funcargs:
+        try:
+            page_url = item.funcargs["page"].url or ""
+        except Exception:
+            pass
+    # 也尝试从 healing_page fixture 提取（MonkeyPatchPage 包装的 page）
+    if not page_url and "healing_page" in item.funcargs:
+        try:
+            hp = item.funcargs["healing_page"]
+            page_url = getattr(hp, "url", "") or getattr(hp, "raw_page", None)
+            if page_url and not isinstance(page_url, str):
+                page_url = getattr(page_url, "url", "") or ""
+        except Exception:
+            pass
+
     # 构建报告条目
     entry = {
         "test_name": item.name,
         "category": category,
-        "action": getattr(locator_error, "action", "") if locator_error else "",
-        "selector": getattr(locator_error, "selector", "") if locator_error else "",
-        "page_url": getattr(locator_error, "page_url", "") if locator_error else "",
+        "action": action,
+        "selector": selector,
+        "page_url": page_url,
         "file": file_path,
         "line": line_no,
         "screenshot": screenshot_path,
@@ -349,6 +405,61 @@ def _is_env_error(exc) -> bool:
         "ERR_SSL", "ERR_TUNNEL",
     ]
     return any(kw in msg for kw in env_keywords)
+
+
+def _extract_selector_from_traceback(tb_text: str) -> str:
+    """从 traceback 中提取 selector 信息（增强版：支持链式表达式）
+
+    尝试匹配：
+    1. 完整的链式表达式（优先匹配最长的）
+    2. locator("...") 调用
+    3. get_by_text("...") 调用
+    4. get_by_role("...") 调用
+    等
+    """
+    import re
+
+    # 优先尝试匹配完整的链式表达式
+    # 匹配 get_by_role("xxx", name="yyy").nth(1) 等模式
+    chain_pattern = (
+        r'(get_by_role|get_by_text|get_by_label|get_by_test_id|'
+        r'get_by_placeholder|get_by_alt_text|get_by_title|locator)'
+        r'\([^)]*\)'
+        r'(?:\.(?:nth\(\d+\)|first|last|filter\([^)]*\)|and_\([^)]*\)|or_\([^)]*\)))*'
+    )
+    full_matches = list(re.finditer(chain_pattern, tb_text))
+    if full_matches:
+        # 取最后一个完整匹配（通常是出错的那个）
+        last_match = full_matches[-1].group(0)
+        # 尝试用 parse_selector 验证
+        try:
+            from self_healing.selector_parser import parse_selector
+            parsed = parse_selector(last_match)
+            if parsed.calls:
+                return last_match
+        except Exception:
+            pass
+        # 即使解析失败也返回原始匹配
+        return last_match
+
+    # 回退到原有逻辑
+    patterns = [
+        r'locator\(["\']([^"\']+)["\']\)',
+        r'get_by_text\(["\']([^"\']+)["\']\)',
+        r'get_by_role\(["\']([^"\']+)["\']\)',
+        r'get_by_label\(["\']([^"\']+)["\']\)',
+        r'get_by_placeholder\(["\']([^"\']+)["\']\)',
+        r'get_by_test_id\(["\']([^"\']+)["\']\)',
+        r'get_by_alt_text\(["\']([^"\']+)["\']\)',
+        r'get_by_title\(["\']([^"\']+)["\']\)',
+    ]
+
+    for pattern in patterns:
+        match = re.search(pattern, tb_text)
+        if match:
+            return match.group(0)  # 返回完整匹配，如 locator(".btn-entrance-wrapper")
+
+    return ""
 
 
 def _extract_failure_location(call) -> tuple:
@@ -393,8 +504,16 @@ def _append_heal_report(entry: dict):
     report["failures"].append(entry)
 
     # 写回
-    with open(HEAL_REPORT_PATH, "w", encoding="utf-8") as f:
-        json.dump(report, f, ensure_ascii=False, indent=2)
+    try:
+        with open(HEAL_REPORT_PATH, "w", encoding="utf-8") as f:
+            json.dump(report, f, ensure_ascii=False, indent=2)
+    except PermissionError:
+        # macOS 权限限制，尝试使用临时目录
+        import tempfile
+        temp_path = os.path.join(tempfile.gettempdir(), "heal_report.json")
+        with open(temp_path, "w", encoding="utf-8") as f:
+            json.dump(report, f, ensure_ascii=False, indent=2)
+        print(f"⚠️ 权限限制，报告已保存到: {temp_path}")
 
     # 打印结构化日志
     icon = {"locator": "🔧", "assertion": "🐛", "env": "🌐"}.get(entry["category"], "❓")
@@ -424,11 +543,22 @@ def pytest_sessionfinish(session, exitstatus):
     if os.environ.get("STRATEGY_REPAIR_RUNNING"):
         return
 
-    if not os.path.exists(HEAL_REPORT_PATH):
-        return
+    # 检查报告文件（优先原始路径，其次临时目录）
+    report_path = HEAL_REPORT_PATH
+    if not os.path.exists(report_path) or os.path.getsize(report_path) == 0:
+        # 尝试临时目录
+        import tempfile
+        temp_path = os.path.join(tempfile.gettempdir(), "heal_report.json")
+        if os.path.exists(temp_path) and os.path.getsize(temp_path) > 0:
+            report_path = temp_path
+        else:
+            return
+
+    print(f"\n🔍 [DEBUG] pytest_sessionfinish 被调用")
+    print(f"   report_path: {report_path}")
 
     try:
-        with open(HEAL_REPORT_PATH, "r", encoding="utf-8") as f:
+        with open(report_path, "r", encoding="utf-8") as f:
             report = json.load(f)
     except Exception:
         return
@@ -442,7 +572,7 @@ def pytest_sessionfinish(session, exitstatus):
         from scheduler.strategy import FailureRepairOrchestrator
         project_root = os.path.dirname(__file__)
         scheduler = FailureRepairOrchestrator(project_root)
-        scheduler.run(HEAL_REPORT_PATH)
+        scheduler.run(report_path)
     except ImportError:
         # 策略层不可用，回退到旧逻辑（仅处理 locator）
         print(f"\n⚠️ 策略层未就绪，使用旧版自愈逻辑")
@@ -459,18 +589,18 @@ def pytest_sessionfinish(session, exitstatus):
     # 归档报告文件（不删除，保留供 repair 命令重跑）
     try:
         import shutil
-        archive_dir = os.path.join(os.path.dirname(HEAL_REPORT_PATH), "archive")
+        archive_dir = os.path.join(os.path.dirname(report_path), "archive")
         os.makedirs(archive_dir, exist_ok=True)
         ts = time.strftime("%Y%m%d_%H%M%S")
         archive_path = os.path.join(archive_dir, f"heal_report_{ts}.json")
-        shutil.move(HEAL_REPORT_PATH, archive_path)
+        shutil.move(report_path, archive_path)
         print(f"📦 报告已归档: {archive_path}")
     except Exception:
         pass
 
 
 def _auto_heal(failures: list):
-    """对定位错误调用 healer pipeline 进行自动修复"""
+    """对定位错误调用五层自愈引擎进行自动修复"""
     import datetime
 
     for entry in failures:
@@ -487,21 +617,22 @@ def _auto_heal(failures: list):
         print(f"     选择器: {selector!r}")
         print(f"     页面:   {page_url}")
 
-        # 调用 healer pipeline（同步桥接）
-        healed = _call_healer(selector, page_url)
+        # 调用五层自愈引擎（同步）
+        error_message = entry.get("error_message", "")
+        result = _call_five_tier_engine(selector, page_url, error_message)
 
-        if healed and healed != selector:
-            # 回写源码
-            success = _patch_source(file_path, selector, healed)
+        if result and result.success and result.healed_selector and result.healed_selector != selector:
+            # 使用 SourcePatcher 回写源码
+            from self_healing.source_patcher import SourcePatcher
+            success = SourcePatcher.patch_file(file_path, selector, result.healed_selector) if file_path else False
             if success:
-                print(f"     ✅ 修复成功: {selector!r} → {healed!r}")
-                # 记录修复日志
-                _log_heal_result(test_name, selector, healed, file_path, success=True)
+                print(f"     ✅ 修复成功: {selector!r} → {result.healed_selector!r}")
+                _log_heal_result(test_name, selector, result.healed_selector, file_path, success=True)
             else:
-                print(f"     ⚠️ healer 找到了新选择器但源码回写失败")
-                _log_heal_result(test_name, selector, healed, file_path, success=False)
+                print(f"     ⚠️ 引擎找到了新选择器但源码回写失败")
+                _log_heal_result(test_name, selector, result.healed_selector, file_path, success=False)
         else:
-            print(f"     ❌ healer 未能修复此选择器")
+            print(f"     ❌ 五层引擎未能修复此选择器")
             _log_heal_result(test_name, selector, "", file_path, success=False)
 
     print(f"\n{'='*60}")
@@ -509,25 +640,27 @@ def _auto_heal(failures: list):
     print(f"{'='*60}")
 
 
-def _call_healer(selector: str, page_url: str) -> str | None:
-    """同步调用 healer pipeline 进行选择器修复
+def _call_five_tier_engine(selector: str, page_url: str, error_message: str = ""):
+    """同步调用五层自愈引擎进行选择器修复
 
     Returns:
-        修复后的选择器，或 None
+        HealingResult 或 None
     """
-    import asyncio
+    try:
+        from self_healing.pipeline import HealingPipeline
+        from playwright.sync_api import sync_playwright
 
-    async def _heal():
-        from playwright.async_api import async_playwright
-        from self_healing.healer_config import get_healer_config
+        # P2: 复用登录守卫，确保登录态有效
+        try:
+            from login.refresh_login_state import ensure_valid_login_state
+            login_ok = ensure_valid_login_state()
+            if not login_ok:
+                print("     ⚠️ 登录态刷新失败，自愈引擎可能在未登录状态下执行")
+        except Exception as e:
+            print(f"     ⚠️ 登录守卫调用失败: {e}，继续尝试使用现有登录态")
 
-        config = get_healer_config()
-
-        from playwright.async_api import async_playwright
-        from playwright_healer.pipeline import HealingPipeline
-
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(
+        with sync_playwright() as p:
+            browser = p.chromium.launch(
                 headless=True,
                 args=["--no-sandbox", "--ignore-certificate-errors"],
             )
@@ -541,81 +674,28 @@ def _call_healer(selector: str, page_url: str) -> str | None:
             if os.path.exists(storage_state_path):
                 context_args["storage_state"] = storage_state_path
 
-            context = await browser.new_context(**context_args)
-            page = await context.new_page()
+            context = browser.new_context(**context_args)
+            page = context.new_page()
 
             # 导航到目标页面
             if page_url and page_url != "about:blank":
                 try:
-                    await page.goto(page_url, wait_until="domcontentloaded", timeout=30000)
-                    await page.wait_for_timeout(3000)
+                    page.goto(page_url, wait_until="domcontentloaded", timeout=30000)
+                    page.wait_for_timeout(3000)
                 except Exception as e:
                     print(f"     ⚠️ 导航失败: {e}")
 
-            # 创建 pipeline 并调用自愈
-            pipeline = HealingPipeline(page, config, test_name="auto_heal")
+            # 创建五层管线并执行自愈
+            cache_dir = os.path.join(os.path.dirname(__file__), "output", "heal_cache")
+            pipeline = HealingPipeline(page, cache_dir=cache_dir)
+            result = pipeline.heal(selector, page_url=page_url, error_message=error_message)
 
-            try:
-                await pipeline.find(selector, selector)
+            browser.close()
+            return result
 
-                # 从 session_report 获取修复后的选择器
-                healed_selector = None
-                for event in pipeline.session_report.events:
-                    if event.selector == selector and event.healed_selector:
-                        healed_selector = event.healed_selector
-                        break
-
-                return healed_selector
-
-            except Exception as e:
-                print(f"     ❌ healer pipeline 异常: {e}")
-                return None
-            finally:
-                try:
-                    await pipeline.shutdown()
-                except Exception:
-                    pass
-                await browser.close()
-
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        loop = None
-
-    if loop and loop.is_running():
-        # pytest 内部有事件循环 → 用线程池
-        import concurrent.futures
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            future = executor.submit(asyncio.run, _heal())
-            return future.result(timeout=120)
-    else:
-        return asyncio.run(_heal())
-
-
-def _patch_source(file_path: str, old_selector: str, new_selector: str) -> bool:
-    """在源文件中替换失效的选择器"""
-    if not file_path or not os.path.exists(file_path):
-        print(f"     ⚠️ 源文件不存在: {file_path}")
-        return False
-
-    with open(file_path, "r", encoding="utf-8") as f:
-        content = f.read()
-
-    if old_selector not in content:
-        print(f"     ⚠️ 源文件中未找到选择器: {old_selector!r}")
-        return False
-
-    # 备份
-    backup_path = file_path + ".bak"
-    if not os.path.exists(backup_path):
-        with open(backup_path, "w", encoding="utf-8") as f:
-            f.write(content)
-
-    new_content = content.replace(old_selector, new_selector)
-    with open(file_path, "w", encoding="utf-8") as f:
-        f.write(new_content)
-
-    return True
+    except Exception as e:
+        print(f"     ❌ 五层引擎调用异常: {e}")
+        return None
 
 
 def _log_heal_result(test_name: str, old_sel: str, new_sel: str, file_path: str, success: bool):
@@ -642,5 +722,13 @@ def _log_heal_result(test_name: str, old_sel: str, new_sel: str, file_path: str,
         "success": success,
     })
 
-    with open(log_path, "w", encoding="utf-8") as f:
-        json.dump(logs, f, ensure_ascii=False, indent=2)
+    try:
+        with open(log_path, "w", encoding="utf-8") as f:
+            json.dump(logs, f, ensure_ascii=False, indent=2)
+    except PermissionError:
+        # macOS 权限限制，保存到临时目录
+        import tempfile
+        temp_path = os.path.join(tempfile.gettempdir(), "heal_log.json")
+        with open(temp_path, "w", encoding="utf-8") as f:
+            json.dump(logs, f, ensure_ascii=False, indent=2)
+        print(f"⚠️ 权限限制，日志已保存到: {temp_path}")

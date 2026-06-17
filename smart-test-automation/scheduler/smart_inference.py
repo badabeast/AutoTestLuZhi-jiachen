@@ -227,6 +227,7 @@ class CrossModuleInferencer:
     def __init__(self):
         self.knowledge_dir = Path("knowledge/modules")
         self._ai_provider = None  # 延迟初始化
+        self._frontend_kb = None  # 延迟加载前端知识库
 
    
 
@@ -369,6 +370,29 @@ class CrossModuleInferencer:
     # AI 介入审核check
     
 
+    def _get_frontend_context_for_apis(self, apis: list) -> str:
+        """根据API路径获取相关的前端知识上下文
+        
+        Args:
+            apis: API路径列表，如 ["POST /demand/create", "GET /demand/detail"]
+        
+        Returns:
+            str: 相关的前端知识文档片段
+        """
+        if self._frontend_kb is None:
+            from knowledge.frontend_loader import FrontendKnowledgeBase
+            self._frontend_kb = FrontendKnowledgeBase()
+        
+        contexts = []
+        for api in apis:
+            # 提取API路径（去掉方法前缀）
+            path = api.split(" ", 1)[-1] if " " in api else api
+            context = self._frontend_kb.load_for_api(path)
+            if context:
+                contexts.append(context)
+        
+        return "\n\n".join(contexts) if contexts else ""
+
     def _ai_arbitrate(
         self,
         module_a: str,
@@ -386,14 +410,33 @@ class CrossModuleInferencer:
             pairs_desc.append(f"  - A的变量: {a_var['name']} (字段: {a_var['field']}) "
                              f"vs B的参数: {b_param['name']} (字段: {b_param['field']})")
 
+        # 收集涉及的API路径，查询相关前端知识
+        involved_apis = []
+        for _, (a_var, b_param, _, _, _) in pending:
+            if a_var.get("api"):
+                involved_apis.append(a_var["api"])
+        
+        frontend_context = self._get_frontend_context_for_apis(involved_apis)
+
         prompt = (
             f"判断以下变量名对是否表示同一个业务字段（语义是否相同）。\n"
             f"模块A({module_a})的产出变量 vs 模块B({module_b})的输入参数：\n\n"
             + "\n".join(pairs_desc)
-            + "\n\n"
+        )
+        
+        # 注入前端知识上下文
+        if frontend_context:
+            prompt += "\n\n---\n【前端知识库参考】\n"
+            prompt += "以下是前端开发团队沉淀的接口文档和业务逻辑说明，请优先参考：\n\n"
+            prompt += frontend_context[:4000]  # 限制长度避免超出token
+            prompt += "\n---\n"
+        
+        prompt += (
+            "\n\n"
             "返回JSON数组，每个元素包含 index 和 confidence(0~1)：\n"
             '[{"index":0,"confidence":0.9}]\n'
             "confidence>0.8 表示认为是同一字段，<0.3 表示不是。\n"
+            "如果前端知识库中有明确的字段说明，请基于此判断。\n"
             "直接返回JSON："
         )
 

@@ -3,8 +3,9 @@
     "glm-5.1": {
       "name": "zcy AI 平台 / GLM-5.1",
       "vendor": "zcy_ai",
-      "url": "https://ai-platform.cai-inc.com/api/biz-ai/ai-model/api/11/apps/anthropic/v1/messages",
-      "env_key": "ANTHROPIC_AUTH_TOKEN",
+      "url": "https://ai-platform.cai-inc.com/api/biz-ai/ai-model/api/11/compatible-mode/v1",
+      "env_key": "AI_API_KEY",
+      "protocol": "openai_compatible",
       "supports_tool_call": true,
       "supports_reasoning": true
     },
@@ -13,12 +14,13 @@
       "vendor": "ollama",
       "url": "http://localhost:11434/api",
       "env_key": null,
+      "protocol": "openai_compatible",
       "supports_tool_call": false,
       "supports_reasoning": false
     }
   },
   "vendor_urls": {
-    "zcy_ai": "https://ai-platform.cai-inc.com/api/biz-ai/ai-model/api/11/apps/anthropic/v1/messages"
+    "zcy_ai": "https://ai-platform.cai-inc.com/api/biz-ai/ai-model/api/11/compatible-mode/v1"
   },
   "default_model": "glm-5.1"
 }

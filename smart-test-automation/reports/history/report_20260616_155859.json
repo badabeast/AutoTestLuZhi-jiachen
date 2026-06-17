@@ -1,0 +1,28 @@
+{
+  "title": "智能测试自动化 — 测试报告",
+  "timestamp": "2026-06-16 15:58:59",
+  "duration": 102.06280994415283,
+  "environment": {
+    "project": "smart-test-automation",
+    "team": "QA",
+    "python": "3.14.4",
+    "platform": "macOS-14.1.1-arm64-arm-64bit-Mach-O"
+  },
+  "results": [
+    {
+      "name": "test_create_demand_entry2[chromium]",
+      "nodeid": "output/modules/create_demand/po/test_create_demand.py::test_create_demand_entry2[chromium]",
+      "suite": "test_create_demand",
+      "outcome": "failed",
+      "duration": 101.51184437493794,
+      "start_time": 1781596637.899313,
+      "description": "create_demand — 货物类 entry2",
+      "markers": [],
+      "error_message": "output/modules/create_demand/po/test_create_demand.py:17: in test_create_demand_entry2",
+      "error_traceback": "output/modules/create_demand/po/test_create_demand.py:17: in test_create_demand_entry2\n    dp.run_full_flow(entry_index=2)\noutput/modules/create_demand/po/create_demand_page.py:828: in run_full_flow\n    self.submit_demand()\noutput/modules/create_demand/po/create_demand_page.py:450: in submit_demand\n    raise Exception(f\"提交被拦截：表单校验失败 - {'; '.join(errors[:5])}\")\nE   Exception: 提交被拦截：表单校验失败 - 请选择; 根据机构要求，[测试附件]类型下的审批单不能为空，请先关联审批单",
+      "stdout": "   📦 检测到货物类表单\n   ✅ auto_fill 已填: 联系人姓名\n   🔍 [申请人部门] 检测 input id=demandBase.optionalReviewer placeholder= val=''\n   🔍 auto_fill 发现未填: 申请人部门\n   🔧 [申请人部门] 匹配到 input id=demandBase.optionalReviewer name= val=''\n   ✅ 自动填充必填项(input): 申请人部门 = 采购部\n   🔍 auto_fill 发现未填: 需求单名称\n   ✅ 自动填充必填项(ID匹配): 需求单名称 = 自动测试需求单_20260616155718\n   📋 页面必填字段: ['联系人姓名', '申请人部门', '需求单名称']\n   📋 已处理字段: set()\n   📋 auto_fill 新发现 3 个未填必填项\n   ✅ 组织形式(cascader): 分散采购\n   smart_fill[经费项目号]: 策略1命中 (role+name精确)\n   smart_select[费用类型]: 触发器已点击，等待选项 '办公用品' 出现...\n   smart_select[费用类型]: 精确匹配选中 '办公用品'\n   smart_select[预算科目]: 触发器已点击，等待选项 '办公费' 出现...\n   smart_select[预算科目]: 精确匹配选中 '办公费'\n   smart_select[经办人]: 触发器已点击，等待选项 '测试 - 123456 （采购部）' 出现...\n   smart_select[经办人]: 精确匹配选中 '测试 - 123456 （采购部）'\n   ✅ 经费弹窗已确认\n   ✅ auto_fill 已填: 联系人姓名\n   🔍 [申请人部门] 检测 input id=demandBase.optionalReviewer placeholder= val=''\n   🔍 auto_fill 发现未填: 申请人部门\n   🔧 [申请人部门] 匹配到 input id=demandBase.optionalReviewer name= val=''\n   ✅ 自动填充必填项(input): 申请人部门 = 采购部\n   ✅ auto_fill 已填: 需求单名称\n   📋 页面必填字段: ['联系人姓名', '申请人部门', '需求单名称']\n   📋 已处理字段: set()\n   📋 auto_fill 新发现 3 个未填必填项\n   ❌ 第 1 次提交被拦截，2 个校验错误:\n      - 请选择\n      - 根据机构要求，[测试附件]类型下的审批单不能为空，请先关联审批单\n   🔍 自愈分析: error='请选择' → inp_id=None\n   🔍 自愈分析: error='根据机构要求，[测试附件]类型下的审批单不能为空，请先关联审批单' → inp_id=None\n   ⚠️ 自愈未能修复，尝试全字段扫描...\n   ✅ auto_fill 已填: 联系人姓名\n   🔍 [申请人部门] 检测 input id=demandBase.optionalReviewer placeholder= val=''\n   🔍 auto_fill 发现未填: 申请人部门\n   🔧 [申请人部门] 匹配到 input id=demandBase.optionalReviewer name= val=''\n   ✅ 自动填充必填项(input): 申请人部门 = 采购部\n   ✅ auto_fill 已填: 需求单名称\n   📋 页面必填字段: ['联系人姓名', '申请人部门', '需求单名称']\n   📋 已处理字段: set()\n   📋 auto_fill 新发现 3 个未填必填项\n   ❌ 第 2 次提交被拦截，2 个校验错误:\n      - 请选择\n      - 根据机构要求，[测试附件]类型下的审批单不能为空，请先关联审批单\n   🔍 自愈分析: error='请选择' → inp_id=None\n   🔍 自愈分析: error='根据机构要求，[测试附件]类型下的审批单不能为空，请先关联审批单' → inp_id=None\n   ⚠️ 自愈未能修复，尝试全字段扫描...\n   ✅ auto_fill 已填: 联系人姓名\n   🔍 [申请人部门] 检测 input id=demandBase.optionalReviewer placeholder= val=''\n   🔍 auto_fill 发现未填: 申请人部门\n   🔧 [申请人部门] 匹配到 input id=demandBase.optionalReviewer name= val=''\n   ✅ 自动填充必填项(input): 申请人部门 = 采购部\n   ✅ auto_fill 已填: 需求单名称\n   📋 页面必填字段: ['联系人姓名', '申请人部门', '需求单名称']\n   📋 已处理字段: set()\n   📋 auto_fill 新发现 3 个未填必填项\n   ❌ 第 3 次提交被拦截，2 个校验错误:\n      - 请选择\n      - 根据机构要求，[测试附件]类型下的审批单不能为空，请先关联审批单\n",
+      "properties": {}
+    }
+  ],
+  "extra": {}
+}

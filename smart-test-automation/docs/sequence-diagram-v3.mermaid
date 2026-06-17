@@ -1,0 +1,66 @@
+sequenceDiagram
+    participant Test as pytest 测试用例
+    participant MPP as MonkeyPatchPage
+    participant HL as HealingLocator
+    participant Page as sync Page
+    participant LAE as LocatorActionError
+    participant Conf as conftest.py
+    participant FC as FailureClassifier
+    participant SDE as StrategyDecisionEngine
+    participant RE as RepairExecutor
+    participant CHP as ChainHealingPipeline
+    participant FTP as FiveTierPipeline
+    participant L1 as L1:CacheFirst
+    participant L2 as L2:SemanticLocator
+    participant L3 as L3:DynamicAttrFilter
+    participant L4 as L4:DOMTopology
+    participant L5 as L5:IframeShadowPierce
+    participant Healer as healer核心算法
+    participant AI as AIFallbackHealer
+    participant OAI as 公司AI平台
+    participant SP as SourcePatcher
+
+    Test->>MPP: page.get_by_role("textbox", name="需求单名称").nth(1).fill("测试")
+    MPP->>HL: HealingLocator(selector="get_by_role(...).nth(1)")
+    HL->>Page: _locator.nth(1).fill("测试")
+    Page-->>HL: TimeoutError
+    HL->>LAE: raise LocatorActionError(action="fill", selector="get_by_role(...).nth(1)")
+
+    LAE-->>Conf: pytest_runtest_makereport 捕获
+    Conf->>Conf: 写入 heal_report.json
+
+    Note over Conf: session 结束
+
+    Conf->>FC: classify(entry)
+    FC-->>SDE: FailureCategory.LOCATOR_TIMEOUT
+    SDE->>RE: RepairDecision(PATCH_SCRIPT)
+    RE->>CHP: heal(selector, action, page_url, dom_schema)
+
+    Note over CHP: 预处理：拆链
+    CHP->>CHP: base="get_by_role(...)" + chain=".nth(1)"
+
+    CHP->>FTP: heal(base_selector)
+    FTP->>L1: try_match(base, page_url)
+    L1-->>FTP: 未命中缓存
+    FTP->>L2: try_generate(page, base, action, dom_schema)
+    L2->>Healer: 复用 HeuristicHealer 生成变异
+    Healer-->>L2: name变体
+    L2->>Page: 逐个验证
+    Page-->>L2: 均超时
+    FTP->>L3: try_match(page, base, action)
+    L3-->>FTP: 不适用(非CSS)
+    FTP->>L4: try_match(page, base, action, dom_schema)
+    L4->>L4: 从dom_schema提取拓扑
+    L4->>Healer: 复用DOM模糊扫描
+    L4->>Page: 评分
+    L4-->>FTP: 匹配score=0.82
+    FTP-->>CHP: HealingResult(success, base="textbox::需求名称", "DOM_TOPOLOGY")
+
+    Note over CHP: 后处理：组链
+    CHP->>CHP: _rechain → 'get_by_role("textbox", name="需求名称").nth(1)'
+    CHP->>Page: 验证完整选择器
+    Page-->>CHP: OK
+
+    CHP-->>RE: ChainHealingResult(success)
+    RE->>SP: patch_file(file, old, new)
+    SP-->>RE: True
