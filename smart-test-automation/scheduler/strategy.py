@@ -583,7 +583,7 @@ class RepairExecutor:
             )
 
     def _patch_via_five_tier_engine(self, params: Dict, entry: FailureEntry) -> RepairResult:
-        """通过五层自愈引擎修复选择器（替代 playwright-healer）"""
+        """通过五层自愈引擎修复选择器"""
         selector = params.get("selector", "")
         page_url = params.get("page_url", "")
         file_path = params.get("file", "")
@@ -665,7 +665,6 @@ class RepairExecutor:
                 message=f"五层引擎调用异常: {e}",
             )
 
-    # 旧名兼容
     _patch_via_healer = _patch_via_five_tier_engine
 
     def _patch_via_ai(self, params: Dict, entry: FailureEntry) -> RepairResult:
@@ -1082,4 +1081,4 @@ class FailureRepairOrchestrator:
             json.dumps(report, ensure_ascii=False, indent=2, default=str),
             encoding="utf-8",
         )
-        print(f"\n📊 修复报告: {report_path}")
+        print(f"\n📊 修复报告: {report_path.resolve()}")

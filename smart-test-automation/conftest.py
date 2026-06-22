@@ -1,12 +1,11 @@
 """
 smart-test-automation conftest.py
 
-playwright-healer 自愈配置:
-  - healing_config / healing_page 由 playwright-healer 插件自动注册
-    (通过 entry_point pytest11，无需在此处定义)
-  - 本文件仅负责: 浏览器上下文配置、登录守卫、测试报告 Hooks
-  - 自愈参数通过 pytest.ini 的 addopts 或命令行 --ph-* 传入
-  - LocatorActionError 自动采集并写入 JSON 报告供 heal_runner 使用
+职责:
+  - 浏览器上下文配置、登录守卫、测试报告 Hooks
+  - healing_page fixture（MonkeyPatchPage 包装，运行时错误捕获）
+  - pytest_sessionfinish: 测试结束后触发策略层自愈修复
+  - LocatorActionError 自动采集并写入 JSON 报告
 
 登录态管理:
   - browser_context_args: 加载 storage_state 并清洗 expires=-1 cookie
@@ -342,7 +341,11 @@ def _collect_locator_errors(item, call, report, screenshot_path: str):
         "file": file_path,
         "line": line_no,
         "screenshot": screenshot_path,
-        "error_message": str(exc)[:500],
+        # 使用原始 Playwright 错误，避免 __str__ 截断丢失 aka 提示
+        "error_message": (
+            str(exc.original_error) if hasattr(exc, "original_error") and exc.original_error
+            else str(exc)
+        )[:2000],
     }
 
     _append_heal_report(entry)
@@ -478,6 +481,41 @@ def _append_heal_report(entry: dict):
         print(f"   selector={entry['selector']!r} action={entry['action']}")
 
 
+def _validate_patched_scripts():
+    """语法安全网：扫描 output/modules/ 下所有 enhanced_script.py，
+    如果有 .bak 备份且当前文件语法不合法，自动回退到 .bak。
+    """
+    import ast as _ast
+    from pathlib import Path as _Path
+
+    modules_dir = _Path(os.path.join(os.path.dirname(__file__), "output", "modules"))
+    if not modules_dir.exists():
+        return
+
+    reverted = []
+    for script in modules_dir.glob("*/enhanced_script.py"):
+        bak = script.with_suffix(".py.bak")
+        if not bak.exists():
+            continue
+        try:
+            source = script.read_text(encoding="utf-8")
+            _ast.parse(source)
+        except SyntaxError:
+            # 当前文件语法错误，回退到 .bak
+            try:
+                bak_source = bak.read_text(encoding="utf-8")
+                _ast.parse(bak_source)
+                script.write_text(bak_source, encoding="utf-8")
+                reverted.append(str(script.relative_to(modules_dir)))
+            except (SyntaxError, OSError):
+                pass  # .bak 也有问题，不动
+
+    if reverted:
+        print(f"\n🛡️ 语法安全网: 回退 {len(reverted)} 个被 AI patch 损坏的脚本:")
+        for name in reverted:
+            print(f"   {name}")
+
+
 def pytest_sessionfinish(session, exitstatus):
     """测试 session 结束后：使用回退优先级策略层处理所有失败类型
 
@@ -508,8 +546,7 @@ def pytest_sessionfinish(session, exitstatus):
         else:
             return
 
-    print(f"\n🔍 [DEBUG] pytest_sessionfinish 被调用")
-    print(f"   report_path: {report_path}")
+
 
     try:
         with open(report_path, "r", encoding="utf-8") as f:
@@ -528,17 +565,20 @@ def pytest_sessionfinish(session, exitstatus):
         scheduler = FailureRepairOrchestrator(project_root)
         scheduler.run(report_path)
     except ImportError:
-        # 策略层不可用，回退到旧逻辑（仅处理 locator）
-        print(f"\n⚠️ 策略层未就绪，使用旧版自愈逻辑")
+        # 策略层不可用，回退到直接修复（仅处理 locator）
+        print(f"\n⚠️ 策略层未就绪，使用直接修复")
         locator_failures = [e for e in all_failures if e.get("category") == "locator"]
         if locator_failures:
             _auto_heal(locator_failures)
     except Exception as e:
         print(f"\n⚠️ 策略层执行异常: {e}")
-        print(f"   回退到旧版自愈逻辑")
+        print(f"   回退到直接修复")
         locator_failures = [e for e in all_failures if e.get("category") == "locator"]
         if locator_failures:
             _auto_heal(locator_failures)
+
+    # 语法安全网：检查所有被 patch 的脚本是否仍为合法 Python
+    _validate_patched_scripts()
 
     # 归档报告文件（不删除，保留供 repair 命令重跑）
     try:

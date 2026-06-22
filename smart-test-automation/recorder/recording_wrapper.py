@@ -289,6 +289,7 @@ class TwoStepRecorder:
                 input_path=str(raw_script),
                 output_path=str(enhanced_script),
                 module_name=module_name,
+                target_url=target_url,
             )
             ts5 = datetime.now().strftime("%Y%m%d_%H%M%S")
             versioned_enhanced = output_dir / f"enhanced_script_{ts5}.py"
@@ -322,7 +323,7 @@ class TwoStepRecorder:
                     module_name, api_timeline_mappings, param_chains
                 )
                 api_test_script.write_text(script_content, encoding='utf-8')
-                print(f"   接口测试脚本: {api_test_script} ({len(script_content)} 字符)")
+                print(f"   接口测试脚本: {api_test_script} ")
             except Exception as e:
                 print(f"   ⚠️ 接口测试脚本生成失败: {e}")
                 api_test_script = None

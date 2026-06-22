@@ -110,13 +110,14 @@ class HealingPipeline:
 
         candidates: list[HealingCandidate] = []
 
-        # L0: Strict Violation 快速修复路径
+        # L0: Strict Violation 修复路径
         if error_message:
             from self_healing.strict_violation_healer import StrictViolationHealer
             l0 = StrictViolationHealer()
             if l0.is_strict_violation(error_message):
-                logger.info(f"[L0] 检测到 strict mode violation，尝试快速收窄选择器")
-                l0_candidates = l0.heal(selector, error_message, page_url)
+                logger.info(f"[L0] 检测到 strict mode violation，启动智能修复（DOM 验证 + 业务上下文感知）")
+                # 传递 page 对象，启用 DOM 验证和智能评分
+                l0_candidates = l0.heal(selector, error_message, page_url, page=self._page)
                 if l0_candidates:
                     candidates.extend(l0_candidates)
                     # L0 候选直接进入评估，不走后续五层

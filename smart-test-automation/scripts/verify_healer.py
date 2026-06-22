@@ -89,27 +89,9 @@ async def verify_ai_api(config):
 
 
 async def verify_healing_page(config):
-    """验证 HealingPage 能正常创建和使用（playwright-healer 已移除，此功能不可用）"""
-    print("\n⚠️ playwright-healer 已从项目中移除，HealingPage 验证跳过")
-    print("   相关功能由本地五层引擎替代: self_healing/pipeline.py")
-    return
-        page = await browser.new_page()
-
-        # 创建 HealingPage
-        hp = HealingPage(page, config, test_name="verify_healer")
-
-        # 基本页面操作
-        await hp.goto("https://example.com")
-        title = await hp.title()
-        print(f"✅ HealingPage 创建成功!")
-        print(f"   页面标题: {title}")
-        print(f"   页面 URL: {page.url}")
-
-        # 关闭
-        await hp.shutdown()
-        await browser.close()
-
-    return True
+    """验证 HealingPage（当前未启用）"""
+    print("\n⚠️ HealingPage 验证跳过")
+    print("   自愈功能由五层引擎提供: self_healing/pipeline.py")
 
 
 async def main():

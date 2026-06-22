@@ -277,7 +277,6 @@ def run_healer_sync(
     Returns:
         自愈成功返回修复后的选择器，失败返回 None
     """
-    # playwright-healer 已移除，使用本地 healer_config 替代
     try:
         from self_healing.healer_config import HealerConfig, get_healer_config
         config = get_healer_config(strategy="SMART", auto_patch_source=True, patch_source_backup=True)
@@ -289,7 +288,6 @@ def run_healer_sync(
 
     async def _heal():
         from playwright.async_api import async_playwright
-        # playwright-healer 已移除，使用本地五层引擎
         from self_healing.pipeline import HealingPipeline
 
         async with async_playwright() as p:

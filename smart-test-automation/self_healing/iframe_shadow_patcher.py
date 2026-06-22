@@ -1,10 +1,8 @@
 """L5: iframe/ShadowDOM 自动穿透修复
 
-独创性：
 1. 自动检测元素是否在 iframe 或 Shadow DOM 中
 2. 动态生成 frame_locator 前缀
 3. 自动开启 >>> Shadow DOM 穿透选择器
-4. playwright-healer 完全不支持此场景
 """
 from __future__ import annotations
 

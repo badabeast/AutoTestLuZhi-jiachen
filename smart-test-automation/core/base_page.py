@@ -780,7 +780,7 @@ class BasePage:
         """断言 URL 包含指定内容"""
         expect(self.page).to_have_url(re.compile(url_part))
 
-    # ── 旧版兼容（不推荐，新代码用 _safe_* 系列）──────────
+    # ── 兼容接口（推荐用 _safe_* 系列）──────────
 
     def wait_for_selector(self, selector: str, timeout: int = 10000):
         """等待选择器出现"""

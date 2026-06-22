@@ -264,9 +264,6 @@ def main():
             sys.executable, "-m", "pytest",
             script_path,
             "-x", "-v",
-            "--ph-strategy=SMART",
-            "--ph-auto-patch-source",
-            "--ph-ai-patch-source",
         ]
         if args.headed:
             cmd.append("--headed")

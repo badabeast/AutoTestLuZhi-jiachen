@@ -182,7 +182,7 @@ class HealingLocator:
                         page_url=page_url,
                         original_error=e,
                     )
-                    # L0: 附带 strict violation 原始错误文本
+                    # 保留 strict violation 原始错误文本
                     error_message = str(e)
                     if "strict mode violation" in error_message.lower():
                         error.strict_violation_message = error_message
@@ -261,7 +261,7 @@ class HealingLocator:
                 page_url=page_url,
                 original_error=e,
             )
-            # L0: 附带 strict violation 原始错误文本
+            # 保留 strict violation 原始错误文本
             error_message = str(e)
             if "strict mode violation" in error_message.lower():
                 error.strict_violation_message = error_message

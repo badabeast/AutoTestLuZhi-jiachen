@@ -64,16 +64,35 @@ class SourcePatcher:
         return SourcePatcher._ast_replace(file_path, source, old_parsed, new_parsed)
 
     @staticmethod
-    def _string_replace(file_path: str, source: str, old_sel: str, new_sel: str) -> bool:
-        """直接字符串替换 + 备份"""
+    def _is_valid_python(source: str) -> bool:
+        """检查源码是否为合法 Python"""
+        try:
+            ast.parse(source)
+            return True
+        except SyntaxError:
+            return False
+
+    @staticmethod
+    def _safe_write(file_path: str, new_source: str, backup_source: str) -> bool:
+        """写入前做语法校验，不合法则回退到备份"""
+        if not SourcePatcher._is_valid_python(new_source):
+            logger.warning("语法校验失败，放弃回写: %s", file_path)
+            return False
         path = Path(file_path)
         backup = file_path + ".bak"
         if not Path(backup).exists():
-            Path(backup).write_text(source, encoding="utf-8")
+            Path(backup).write_text(backup_source, encoding="utf-8")
+        path.write_text(new_source, encoding="utf-8")
+        return True
+
+    @staticmethod
+    def _string_replace(file_path: str, source: str, old_sel: str, new_sel: str) -> bool:
+        """直接字符串替换 + 备份"""
         new_source = source.replace(old_sel, new_sel)
         if new_source == source:
             return False
-        path.write_text(new_source, encoding="utf-8")
+        if not SourcePatcher._safe_write(file_path, new_source, source):
+            return False
         logger.info("字符串替换成功: %s → %s", old_sel, new_sel)
         return True
 
@@ -90,12 +109,9 @@ class SourcePatcher:
 
         for variant in variants:
             if variant in source:
-                path = Path(file_path)
-                backup = file_path + ".bak"
-                if not Path(backup).exists():
-                    Path(backup).write_text(source, encoding="utf-8")
                 new_source = source.replace(variant, new_canonical)
-                path.write_text(new_source, encoding="utf-8")
+                if not SourcePatcher._safe_write(file_path, new_source, source):
+                    continue
                 logger.info("宽松字符串替换成功: %s → %s", variant, new_canonical)
                 return True
         return False
@@ -158,10 +174,8 @@ class SourcePatcher:
                 except AttributeError:
                     import astunparse
                     new_source = astunparse.unparse(new_tree)
-                backup = file_path + ".bak"
-                if not Path(backup).exists():
-                    Path(backup).write_text(source, encoding="utf-8")
-                Path(file_path).write_text(new_source, encoding="utf-8")
+                if not SourcePatcher._safe_write(file_path, new_source, source):
+                    return False
                 logger.info("AST替换成功，共替换 %d 处", patcher.patched_count)
                 return True
         except Exception as e:

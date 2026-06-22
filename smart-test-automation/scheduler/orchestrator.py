@@ -13,6 +13,7 @@
 import json
 import logging
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -121,10 +122,17 @@ class TestChainOrchestrator:
                 # P0 #1: 检查自动修复是否成功
                 healed = self._check_heal_result(step.module_id)
                 if healed:
-                    module_result["success"] = True
                     module_result["healed"] = True
                     module_result["healed_selectors"] = healed
-                    print(f"🩹 模块 {step.module_id} 自愈修复成功，继续执行后续模块")
+                    # 打印修复详情
+                    print(f"\n{'─'*60}")
+                    print(f"🩹 模块 {step.module_id} 自愈修复成功！")
+                    for h in healed:
+                        print(f"   {h['old']!r} → {h['new']!r}")
+                    print(f"   请重新运行 `python3 cli.py run {target_module}` 验证修复效果")
+                    print(f"{'─'*60}")
+                    # 不标记 success=True，让整体结果仍为失败，提示用户需要重跑
+                    break
                 else:
                     print(f"❌ 模块 {step.module_id} 执行失败")
                     break
@@ -189,19 +197,23 @@ class TestChainOrchestrator:
                             json.dumps(assertion_report, ensure_ascii=False, indent=2, default=str),
                             encoding='utf-8',
                         )
+                        # 生成 HTML 报告（单文件，零依赖，浏览器直接打开）
+                        from assertion.report import save_html_report
+                        html_path = module_dir / "assertion_report.html"
+                        save_html_report(assertion_results, str(html_path))
 
                         # 分别统计 UI 和 API 断言
                         ui_results = [r for r in assertion_results if r.layer == "ui"]
                         api_results = [r for r in assertion_results if r.layer == "api"]
-                        
+
                         ui_passed = sum(1 for r in ui_results if r.status == AssertionStatus.PASSED)
                         ui_failed = sum(1 for r in ui_results if r.status == AssertionStatus.FAILED)
                         api_passed = sum(1 for r in api_results if r.status == AssertionStatus.PASSED)
                         api_failed = sum(1 for r in api_results if r.status == AssertionStatus.FAILED)
-                        
+
                         passed = ui_passed + api_passed
                         failed = ui_failed + api_failed
-                        
+
                         print(f"   📊 断言统计:")
                         if ui_results:
                             print(f"      UI 断言: {ui_passed}/{len(ui_results)} 通过, {ui_failed} 失败")
@@ -213,6 +225,8 @@ class TestChainOrchestrator:
                             for r in assertion_results:
                                 if r.status == AssertionStatus.FAILED:
                                     print(f"      ❌ [{r.layer.upper()}] {r.description}: 期望 {r.expected}, 实际 {r.actual}")
+
+                        print(f"      📋 断言报告: {html_path.resolve()}")
 
                         module_result["assertion_summary"] = {
                             "total": len(assertion_results),
@@ -249,7 +263,7 @@ class TestChainOrchestrator:
             json.dumps(report, ensure_ascii=False, indent=2, default=str),
             encoding='utf-8',
         )
-        print(f"\n📊 编排报告: {report_path}")
+        print(f"\n📊 编排报告: {report_path.resolve()}")
 
         return report
 
@@ -271,9 +285,10 @@ class TestChainOrchestrator:
         }
 
     def _check_heal_result(self, module_id: str) -> Optional[List[Dict[str, str]]]:
-        """检查 heal_report.json 判断自动修复是否成功
+        """检查自愈修复是否成功
 
-        # 查 heal_log.json 看有没有修复成功的记录
+        优先读取 strategy_repair_report.json（策略层结果），
+        回退读取 heal_log.json（直接修复日志）。
 
         Args:
             module_id: 模块标识
@@ -281,7 +296,28 @@ class TestChainOrchestrator:
         Returns:
             成功修复的选择器列表 [{old, new}]，或 None
         """
-        # 1. 检查 heal_log.json（strategy repair 在 sessionfinish 中写入）
+        # 1. 策略层修复结果
+        strategy_report_path = Path("output") / "strategy_repair_report.json"
+        if strategy_report_path.exists():
+            try:
+                with open(strategy_report_path, "r", encoding="utf-8") as f:
+                    report = json.load(f)
+                if report.get("repaired", 0) > 0:
+                    healed = []
+                    for detail in report.get("details", []):
+                        result = detail.get("result", {})
+                        if result.get("success") and result.get("new_value"):
+                            healed.append({
+                                "old": result.get("old_value", ""),
+                                "new": result.get("new_value", ""),
+                            })
+                    if healed:
+                        logger.info("策略层修复成功: %d 条记录", len(healed))
+                        return healed
+            except Exception as e:
+                logger.warning("读取 strategy_repair_report.json 失败: %s", e)
+
+        # 2. 直接修复日志（兜底）
         heal_log_path = Path("output") / "heal_log.json"
         if heal_log_path.exists():
             try:
@@ -300,23 +336,45 @@ class TestChainOrchestrator:
             except Exception as e:
                 logger.warning("读取 heal_log.json 失败: %s", e)
 
-        # 2. 回退检查 heal_report.json 的 archive 目录
-        archive_dir = Path("output") / "archive"
-        if archive_dir.exists():
-            try:
-                archive_files = sorted(archive_dir.glob("heal_report_*.json"), reverse=True)
-                if archive_files:
-                    with open(archive_files[0], "r", encoding="utf-8") as f:
-                        report = json.load(f)
-                    """heal_report 本身记录的是失败现场，无法直接判断修复是否成功
-                    但如果 strategy repair 流程正常走完，heal_log.json 应该存在
-                    此处仅作兜底日志"""
-                    failures = report.get("failures", [])
-                    logger.info("归档报告包含 %d 条失败记录（仅供参考）", len(failures))
-            except Exception:
-                pass
-
         return None
+
+    @staticmethod
+    def _is_heal_related(line: str) -> bool:
+        """判断 stdout 行是否和自愈相关（不含 pytest 正常输出）"""
+        # 排除 pytest 的标准测试输出行（PASSED/FAILED 行）
+        if '::test_' in line and ('PASSED' in line or 'FAILED' in line or 'ERROR' in line):
+            return False
+        keywords = [
+            '🩹', '自愈', 'heal', 'strict mode violation',
+            'patch', 'selector', '修复', '尝试', '命中',
+            'HEAL-REPORT', '🔧', '📋 修复', '📊 修复',
+            'L0', 'L1', 'L2', 'L3', 'L4', 'L5',
+        ]
+        line_lower = line.lower()
+        return any(kw.lower() in line_lower for kw in keywords)
+
+    @staticmethod
+    def _is_stderr_noise(line: str) -> bool:
+        """过滤 stderr 中的 pytest 环境噪音信息"""
+        noise_prefixes = [
+            'metadata:', 'plugins:', 'plugin:',
+            'collecting', 'collected',
+            'JAVA_HOME', 'Base URL', 'Base url',
+        ]
+        line_lower = line.strip().lower()
+        if not line_lower:
+            return True
+        # 纯分隔线 (===== / ----- / ____ )
+        stripped = line.strip()
+        if stripped and all(c in '=_- ' for c in stripped):
+            return True
+        for prefix in noise_prefixes:
+            if line_lower.startswith(prefix.lower()):
+                return True
+        # pytest 包信息行: "Packages: {...}" 或 "Python: ..." 等 metadata 子行
+        if re.match(r'^(Packages|Python|Platform)\s*:', line, re.I):
+            return True
+        return False
 
     def _resolve_script_path(self, module_id: str) -> Optional[str]:
         """查找模块的可执行脚本"""
@@ -353,16 +411,9 @@ class TestChainOrchestrator:
         if headed:
             cmd.append("--headed")
 
-        # 默认开启自愈
-        if not no_heal:
-            cmd.extend([
-                "--ph-strategy=SMART",
-                "--ph-auto-patch-source",
-                "--ph-ai-patch-source",
-            ])
+        # 自愈由 conftest.py 的 MonkeyPatchPage + pytest_sessionfinish 自动处理
 
         try:
-            # P0 #2: 传入向后兼容的 healer 环境变量
             env = os.environ.copy()
             try:
                 from self_healing.healer_config import get_healer_env_vars
@@ -380,10 +431,21 @@ class TestChainOrchestrator:
             success = result.returncode == 0
             logger.info("模块执行 %s: returncode=%d", script_path, result.returncode)
 
+            # 打印自愈相关输出
+            if result.stdout:
+                for line in result.stdout.split('\n'):
+                    stripped = line.strip()
+                    if stripped and self._is_heal_related(stripped):
+                        print(f"   {stripped}")
+
             if not success and result.stderr:
-                for line in result.stderr.split('\n')[-10:]:
-                    if line.strip():
-                        print(f"   {line.strip()}")
+                useful_lines = [
+                    line.strip()
+                    for line in result.stderr.split('\n')
+                    if line.strip() and not self._is_stderr_noise(line)
+                ]
+                for line in useful_lines[-15:]:
+                    print(f"   {line}")
 
             return {
                 "module": Path(script_path).parent.name,
