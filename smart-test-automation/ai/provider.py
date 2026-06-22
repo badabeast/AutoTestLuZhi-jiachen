@@ -1,23 +1,20 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-多模型 AI 服务适配层，统一封装不同大模型供应商的接口调用。
-通过 OpenAI 兼容协议对接 DeepSeek、Qwen、Ollama 等后端，
-模型注册信息和连接参数分别从配置文件和环境变量获取，
-不在代码中硬编码敏感信息。
-"""
+"""多模型适配层，统一OpenAI兼容协议对接各供应商。模型配置从文件加载，API Key从环境变量读取。"""
 
 import os
 import json
 import re
+import logging
 import urllib.request
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 
-# 轻量数据模型
 
 from dataclasses import dataclass, field as dc_field
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -73,7 +70,6 @@ class OptimizedScript:
     code: str = ""
     module_name: str = ""
 
-# 模型注册表 — 从配置文件加载
 
 _CONFIG_PATH = Path(__file__).parent / "models_config.json"
 
@@ -85,7 +81,7 @@ def _load_model_registry() -> Dict[str, Dict[str, Any]]:
     从同名环境变量读取（如 vendor_urls.tencent_token_plan → env TENCENT_TOKEN_PLAN_URL）。
     """
     if not _CONFIG_PATH.exists():
-        print(f"⚠️ 模型配置文件不存在: {_CONFIG_PATH}")
+        logger.warning("模型配置文件不存在: %s", _CONFIG_PATH)
         return {}
 
     with open(_CONFIG_PATH, "r", encoding="utf-8") as f:
@@ -197,9 +193,7 @@ class OpenAICompatibleProvider(AIProvider):
                 f"请设置环境变量 {env_key} 或在构造时传入 api_key"
             )
 
-        print(f"🤖 AI Provider: {self.model_name} ({self.base_url})")
-
-    # AIProvider 接口实现
+        logger.info("AI Provider: %s / %s", self.model_name, self.base_url)
 
     def analyze_intent(
         self,
@@ -212,7 +206,7 @@ class OpenAICompatibleProvider(AIProvider):
             response = self._call_api(prompt)
             return self._parse_intent_response(response, operations)
         except Exception as e:
-            print(f"⚠️ AI意图分析失败: {e}")
+            logger.warning("AI意图分析失败: %s", e)
             return self._fallback_intents(operations)
 
     def optimize_selectors(
@@ -226,7 +220,7 @@ class OpenAICompatibleProvider(AIProvider):
             response = self._call_api(prompt)
             return self._parse_selector_response(response, operations)
         except Exception as e:
-            print(f"⚠️ 选择器优化失败: {e}")
+            logger.warning("选择器优化失败: %s", e)
             return self._fallback_selectors(operations)
 
     def generate_test_code(
@@ -245,10 +239,10 @@ class OpenAICompatibleProvider(AIProvider):
             response = self._call_api(prompt)
             return self._extract_code(response)
         except Exception as e:
-            print(f"⚠️ 代码生成失败: {e}")
+            logger.warning("代码生成失败: %s", e)
             return self._fallback_test_code(session_name, operations)
 
-    # API 调用（Anthropic Messages 协议）
+    # OpenAI Chat Completions 协议
 
     def _call_api(self, prompt: str, temperature: float = 0.3) -> str:
         """调用 OpenAI 兼容 Chat Completions API
@@ -292,13 +286,10 @@ class OpenAICompatibleProvider(AIProvider):
         )
         with urllib.request.urlopen(req, timeout=120) as response:
             result = json.loads(response.read().decode("utf-8"))
-            # OpenAI 响应格式: { choices: [{message: {content: "..."}}] }
             choices = result.get("choices", [])
             if choices:
                 return choices[0].get("message", {}).get("content", "")
             return str(result)
-
-    # Prompt 构建
 
     def _build_intent_prompt(
         self,
@@ -365,8 +356,6 @@ class OpenAICompatibleProvider(AIProvider):
         )
         return prompt
 
-    # 解析
-
     def _parse_intent_response(
         self, response: str, operations: List[UIOperation]
     ) -> List[OperationIntent]:
@@ -386,7 +375,7 @@ class OpenAICompatibleProvider(AIProvider):
                     for item in data
                 ]
         except Exception as e:
-            print(f"   解析失败: {e}")
+            logger.warning("意图解析失败: %s", e)
         return self._fallback_intents(operations)
 
     def _parse_selector_response(
@@ -408,7 +397,7 @@ class OpenAICompatibleProvider(AIProvider):
                     for item in data
                 ]
         except Exception as e:
-            print(f"   解析失败: {e}")
+            logger.warning("意图解析失败: %s", e)
         return self._fallback_selectors(operations)
 
     def _extract_code(self, response: str) -> str:
@@ -418,9 +407,7 @@ class OpenAICompatibleProvider(AIProvider):
             return code_match.group(1).strip()
         return response.strip()
 
-    # ------------------------------------------------------------------
     # 回退策略
-    # ------------------------------------------------------------------
 
     @staticmethod
     def _fallback_intents(operations: List[UIOperation]) -> List[OperationIntent]:
@@ -475,8 +462,6 @@ class OpenAICompatibleProvider(AIProvider):
         return "\n".join(lines)
 
 
-# 向后兼容的别名
-
 class MinimaxProvider(OpenAICompatibleProvider):
     """MiniMax Provider（向后兼容）"""
 
@@ -506,8 +491,6 @@ class OpenAIProvider(OpenAICompatibleProvider):
             api_key=api_key,
         )
 
-
-# 工厂函数
 
 def create_ai_provider(
     provider_type: str = DEFAULT_MODEL,

@@ -269,9 +269,9 @@ class _SelectorASTPatcher(ast.NodeTransformer):
             current = current.func.value
         receiver = current
 
-        # 从new_parsed.calls构建新链：
-        # 先用占位符 _obj_ 作为前缀拼接完整表达式字符串，
-        # 然后解析并将 _obj_ 替换为原始 receiver
+        """从new_parsed.calls构建新链：
+        先用占位符 _obj_ 作为前缀拼接完整表达式字符串，
+        然后解析并将 _obj_ 替换为原始 receiver"""
         new_sel_str = self.new_parsed.to_string()
         expr_str = f"_obj_.{new_sel_str}"
         try:

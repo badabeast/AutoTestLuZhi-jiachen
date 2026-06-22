@@ -144,8 +144,8 @@ def test_create_demand(page: Page):
     # ============================================================
     demo_step("脚本转换（healer 兼容）", 2)
 
-    from recorder.script_transformer import ScriptTransformer
-    transformer = ScriptTransformer()
+    from recorder.script_transformer import HealingScriptTransformer
+    transformer = HealingScriptTransformer()
 
     enhanced_script = demo_output / "enhanced_script.py"
     transformer.transform(
@@ -258,8 +258,8 @@ def test_create_demand(page: Page):
     # ============================================================
     demo_step("依赖图构建（拓扑排序）", 5)
 
-    from scheduler.graph import DependencyGraph
-    graph = DependencyGraph()
+    from scheduler.graph import TestChainGraph
+    graph = TestChainGraph()
 
     # 从 knowledge 加载模块并构建图
     from scheduler.module_definition import ModuleDefinition
@@ -288,8 +288,8 @@ def test_create_demand(page: Page):
     # ============================================================
     demo_step("变量传递（VariableResolver）", 6)
 
-    from scheduler.variable_resolver import VariableResolver
-    resolver = VariableResolver()
+    from scheduler.variable_resolver import CrossModuleVariableBridge
+    resolver = CrossModuleVariableBridge()
 
     # 模拟模块 A 产出变量
     resolver.context_vars["demand_id"] = "XQ-2026-00518964"
@@ -393,8 +393,8 @@ def test_create_demand(page: Page):
     print(f"\n  报告文件: {report_path}")
 
     # 编排报告
-    from scheduler.composer import Composer
-    comp = Composer()
+    from scheduler.composer import ExecutionPlanComposer
+    comp = ExecutionPlanComposer()
     plan = comp.compose("confirm_demand_demo", graph)
     plan_path = demo_output / "execution_plan.json"
     plan_path.write_text(json.dumps(plan.to_dict(), ensure_ascii=False, indent=2), encoding='utf-8')

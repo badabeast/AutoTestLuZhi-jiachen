@@ -32,18 +32,23 @@ def main():
     record_parser.add_argument("module_name", help="模块名称（如 create_demand）")
     record_parser.add_argument("--url", default="", help="目标 URL（默认从配置获取）")
     record_parser.add_argument("--project", default="web-demand", help="项目名称")
-    record_parser.add_argument("--storage-state", default="login_state/storage_state.json",
-                              help="登录态文件路径")
-    record_parser.add_argument("--har-filter", default="",
-                              help="HAR URL 过滤模式（默认全量捕获，由解析阶段过滤静态资源）")
+    record_parser.add_argument(
+        "--storage-state",
+        default="login_state/storage_state.json",
+        help="登录态文件路径")
+    record_parser.add_argument(
+        "--har-filter", default="",
+        help="HAR URL 过滤模式（默认全量捕获，由解析阶段过滤静态资源）")
     record_parser.add_argument("--headed-step2", action="store_true",
                               help="Step 2 回放使用有头模式")
 
     # replay
     replay_parser = subparsers.add_parser("replay", help="重放已有 raw_script 生成 HAR/Trace")
     replay_parser.add_argument("module_name", help="模块名称")
-    replay_parser.add_argument("--storage-state", default="login_state/storage_state.json",
-                               help="登录态文件路径")
+    replay_parser.add_argument(
+        "--storage-state",
+        default="login_state/storage_state.json",
+        help="登录态文件路径")
     replay_parser.add_argument("--headed", action="store_true", help="有头模式")
 
     # run
@@ -55,7 +60,6 @@ def main():
     run_parser.add_argument("--var", action="append", default=[],
                             help="注入变量 key=value（可多次使用）")
 
-    # compose（查看编排计划，不执行）
     compose_parser = subparsers.add_parser("compose", help="查看编排计划（不执行）")
     compose_parser.add_argument("target_module", help="目标模块名")
     compose_parser.add_argument("--save", default="", help="保存执行计划到指定路径")
@@ -81,6 +85,7 @@ def main():
     # report
     report_parser = subparsers.add_parser("report", help="查看断言报告")
     report_parser.add_argument("--module", default="", help="指定模块名筛选")
+    report_parser.add_argument("--full", action="store_true", help="生成综合报告（断言+自愈+策略三合一）")
 
     # query-knowledge
     query_parser = subparsers.add_parser("query-knowledge", help="查询知识库")
@@ -104,7 +109,6 @@ def main():
                 from config.accounts import AccountManager
                 project_config = AccountManager.get_project_config(args.project)
                 if project_config:
-                    # 检查登录态是否存在，决定使用哪个URL
                     storage_exists = Path(args.storage_state).exists()
                     if storage_exists:
                         url = project_config.base_url
@@ -158,7 +162,6 @@ def main():
     elif args.command == "run":
         from scheduler.orchestrator import TestChainOrchestrator
 
-        # 解析 --var key=value
         variables = {}
         for v in args.var:
             if "=" in v:
@@ -182,7 +185,7 @@ def main():
                 print(f"   失败模块: {', '.join(failed)}")
             sys.exit(1)
 
-    # compose（查看编排计划，不执行）
+    # compose
     elif args.command == "compose":
         from scheduler.graph import TestChainGraph
         from scheduler.composer import ExecutionPlanComposer
@@ -191,13 +194,11 @@ def main():
 
         graph = TestChainGraph()
 
-        # 从 knowledge 加载模块到图
         for mod_name in list_modules():
             mod_data = load_module_definition(mod_name)
             if mod_data:
                 graph.add_module(ModuleDefinition.from_dict(mod_data))
 
-        # 加载手动依赖关系
         raw_graph = load_dependency_graph()
         for mod_name, deps_list in raw_graph.items():
             for dep in deps_list:
@@ -229,7 +230,6 @@ def main():
         from recorder.script_transformer import HealingScriptTransformer
         transformer = HealingScriptTransformer()
 
-        # 解析 extract_vars
         extract_vars = []
         for v in args.extract_vars:
             parts = v.split(":", 2)
@@ -328,12 +328,42 @@ def main():
             summary = engine.get_decision_summary()
             print(f"📊 汇总: {summary.get('by_strategy', {})}")
         else:
-            # 完整执行
             scheduler = FailureRepairOrchestrator(project_root)
             scheduler.run(report_path)
 
     # report
     elif args.command == "report":
+        # --full: 生成综合报告（三合一 HTML）
+        if args.full:
+            from reports import generate_comprehensive_report
+
+            module_name = args.module
+            if not module_name:
+                print("⚠️  --full 需要指定 --module 参数，例如: python3 cli.py report --full --module demo_module")
+                sys.exit(1)
+
+            module_dir = Path(f"output/modules/{module_name}")
+            assertion_path = module_dir / "assertion_report.json"
+            heal_path = Path("output/archive")
+            strategy_path = Path("output/strategy_repair_report.json")
+
+            # 查找最新的归档 heal_report
+            latest_heal = None
+            if heal_path.exists():
+                archived = sorted(heal_path.glob("heal_report_*.json"), reverse=True)
+                if archived:
+                    latest_heal = str(archived[0])
+
+            html_path = generate_comprehensive_report(
+                module_name=module_name,
+                assertion_json_path=str(assertion_path) if assertion_path.exists() else None,
+                heal_json_path=latest_heal,
+                strategy_json_path=str(strategy_path) if strategy_path.exists() else None,
+            )
+            print(f"✅ 综合报告已生成: {html_path}")
+            print(f"   用浏览器打开: open {html_path}")
+            sys.exit(0)
+
         report_candidates = []
         output_base = Path("output/modules")
         if output_base.exists():
@@ -460,7 +490,6 @@ def main():
                 print(f"📦 模块定义: {args.module}")
                 print(json.dumps(mod_def, ensure_ascii=False, indent=2)[:3000])
         else:
-            # 列出所有模块
             modules = list_modules()
             if not modules:
                 print("📦 知识库为空（尚未录制任何模块）")

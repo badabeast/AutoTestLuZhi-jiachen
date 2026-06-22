@@ -1,8 +1,0 @@
-page.get_by_role("textbox", name="用户名/手机/邮箱").click()
-page.get_by_role("textbox", name="用户名/手机/邮箱").click()
-page.get_by_role("textbox", name="用户名/手机/邮箱").click()
-page.get_by_role("textbox", name="用户名/手机/邮箱").fill("tmind_admin")
-page.get_by_role("textbox", name="密码").click()
-page.get_by_role("textbox", name="密码").click()
-page.get_by_role("textbox", name="密码").fill("Zfcg@123456")
-page.get_by_role("button", name="登 录").click()

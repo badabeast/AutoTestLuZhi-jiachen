@@ -109,9 +109,9 @@ def save_login_state(url: str, account: str = "", password: str = ""):
         try:
             state = context.storage_state()
 
-            # 关键修复：将 expires=-1 的 session cookie 改为 7 天后过期
-            # Playwright storage_state 保存时，expires=-1 的 cookie 在新浏览器中会被忽略
-            # 改为远期时间戳后，cookie 可以跨浏览器进程持久化
+            """关键修复：将 expires=-1 的 session cookie 改为 7 天后过期
+            Playwright storage_state 保存时，expires=-1 的 cookie 在新浏览器中会被忽略
+            改为远期时间戳后，cookie 可以跨浏览器进程持久化"""
             seven_days_later = time.time() + 7 * 24 * 3600  # 7 天后的 Unix 时间戳
             for cookie in state.get("cookies", []):
                 if cookie.get("expires", 0) == -1:
@@ -192,7 +192,7 @@ def show_login_state():
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="登录态保存工具")
-    parser.add_argument("--url", default=os.environ.get("WEB_DEMAND_LOGIN_PAGE_URL", "https://login.test.zcygov.cn/user-login/#/login"),
+    parser.add_argument("--url", default=os.environ.get("WEB_DEMAND_LOGIN_PAGE_URL", ""),
                         help="默认打开登录页")
     parser.add_argument("--project", default="web-demand",
                         help="项目名称，用于从配置获取默认URL (web-demand)")

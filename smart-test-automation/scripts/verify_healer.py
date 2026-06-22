@@ -89,14 +89,10 @@ async def verify_ai_api(config):
 
 
 async def verify_healing_page(config):
-    """验证 HealingPage 能正常创建和使用"""
-    from playwright.async_api import async_playwright
-    from playwright_healer.healer import HealingPage
-
-    print("\n🔄 验证 HealingPage 创建...")
-
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
+    """验证 HealingPage 能正常创建和使用（playwright-healer 已移除，此功能不可用）"""
+    print("\n⚠️ playwright-healer 已从项目中移除，HealingPage 验证跳过")
+    print("   相关功能由本地五层引擎替代: self_healing/pipeline.py")
+    return
         page = await browser.new_page()
 
         # 创建 HealingPage

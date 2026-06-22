@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# 测试脚本转换器
-#
-# 职责：将 Playwright codegen 原始脚本转换为 healer 兼容格式，
-# 支持 page→healing_page 替换、类型注解清理、断言桩注入、
-# 变量提取桩注入（{{variable}} 模板语法）。
-# 替换过程使用占位符保护机制防止双重替换。
+"""
+测试脚本转换器
+
+职责：将 Playwright codegen 原始脚本转换为 healer 兼容格式，
+支持 page→healing_page 替换、类型注解清理、断言桩注入、
+变量提取桩注入（{{variable}} 模板语法）。
+替换过程使用占位符保护机制防止双重替换。
+"""
 
 import re
 from pathlib import Path
@@ -61,7 +63,7 @@ class HealingScriptTransformer:
         source = re.sub(r'\s*page\s*=\s*context\.new_page\(\).*\n?', '', source)
 
         # 5. 处理 import 行：移除 Page 类型，保留其他 import
-        #    因为 HealingPage 使用 async Page，需要将 sync_api 改为 async_api
+        #    page → healing_page 替换后，Page 类型不再需要
         def _fix_import_line(match):
             """处理 from playwright.sync_api import ... 这行"""
             full_line = match.group(0)
@@ -76,7 +78,7 @@ class HealingScriptTransformer:
             items = [i for i in items if i and i != 'Page']
             if not items:
                 return ''
-            # 使用 async_api 替代 sync_api（HealingPage 使用 async Page）
+            # 保持 sync_api（MonkeyPatchPage 是同步的）
             return f'from playwright.async_api import {", ".join(items)}\n'
 
         source = re.sub(
@@ -92,9 +94,9 @@ class HealingScriptTransformer:
         # 6a. 表单填写经验沉淀 — 自动优化常见问题
         source = self._apply_form_experience(source)
 
-        # 6b. 注入 context/browser 别名（codegen 脚本可能引用这些变量）
-        # healing_page 实际上就是一个 Page 对象，没有 context/browser
-        # 如果脚本中有 context.xxx 或 browser.xxx 的调用，需要提供别名
+        """6b. 注入 context/browser 别名（codegen 脚本可能引用这些变量）
+        healing_page 实际上就是一个 Page 对象，没有 context/browser
+        如果脚本中有 context.xxx 或 browser.xxx 的调用，需要提供别名"""
         has_context_ref = bool(re.search(r'\bcontext\.', source))
         has_browser_ref = bool(re.search(r'\bbrowser\.', source))
         if has_context_ref or has_browser_ref:
@@ -133,7 +135,7 @@ Run with:
 
         # 7b. 在 import 区域后插入 datetime import + 断言引擎 import + os import
         # 找到最后一个 import 行，在其后插入
-        assertion_imports = "import os\nimport pytest\nimport pytest_asyncio\nfrom assertion.engine import ThreeLayerAssertionEngine\nfrom assertion.assertion_rule import AssertionLayer\n"
+        assertion_imports = "import os\nimport pytest\nfrom assertion.engine import ThreeLayerAssertionEngine\nfrom assertion.assertion_rule import AssertionLayer\n"
         import_lines = list(re.finditer(r'^(?:from\s+[\w.]+\s+import\s+.*|import\s+.*)$', source, re.MULTILINE))
         if import_lines:
             last_import = import_lines[-1]
@@ -200,6 +202,14 @@ Run with:
         assert_block += "    if _assertions:\n"
         assert_block += "        _assertion_results = _assertion_engine.run_assertions(_assertions, {'page': healing_page})\n"
         assert_block += "        _failed = [r for r in _assertion_results if r.status == 'failed']\n"
+        assert_block += "        # 持久化 UI 断言结果到文件（供编排引擎合并到 assertion_report.json）\n"
+        assert_block += "        import json as _json, os as _os\n"
+        assert_block += "        _ui_results_path = _os.path.join(_os.path.dirname(__file__), 'ui_assertion_results.json')\n"
+        assert_block += "        _ui_data = [{'layer': r.layer, 'description': r.description,\n"
+        assert_block += "                     'status': r.status, 'expected': r.expected, 'actual': r.actual,\n"
+        assert_block += "                     'error_message': r.error_message} for r in _assertion_results]\n"
+        assert_block += "        with open(_ui_results_path, 'w', encoding='utf-8') as _f:\n"
+        assert_block += "            _json.dump(_ui_data, _f, ensure_ascii=False, indent=2)\n"
         assert_block += "        if _failed:\n"
         assert_block += "            for r in _failed:\n"
         assert_block += "                print(f'❌ [{r.layer.upper()}] {r.description}: 期望 {r.expected}, 实际 {r.actual}')\n"
@@ -219,10 +229,6 @@ Run with:
 
         # 10. 清洗录制噪音（生成精简版）
         source = self._clean_noise(source)
-
-        # 10a. Async/healer 兼容转换
-        #     playwright-healer 全异步设计，需将同步调用转为 async/await
-        source = self._async_compat_transform(source)
 
         # 11. 写入精简版输出文件
         with open(output_path, 'w', encoding='utf-8') as f:

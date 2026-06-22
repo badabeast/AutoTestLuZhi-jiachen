@@ -85,10 +85,8 @@ class TestChainOrchestrator:
         Returns:
             dict: 执行报告
         """
-        # 1. 加载依赖图
         self._load_graph()
 
-        # 2. 编排执行计划
         plan = self.composer.compose(target_module, self.graph)
 
         if not plan.chain:
@@ -96,21 +94,17 @@ class TestChainOrchestrator:
 
         print(f"\n🔗 执行链: {' → '.join(plan.chain)}")
 
-        # 3. 注入外部变量
         if variables:
             self.resolver.inject_external(variables)
 
-        # 4. 逐模块执行
         results = []
         for step in plan.steps:
             print(f"\n{'='*40}")
             print(f"▶ 执行模块: {step.module_id} (Step {step.order})")
             print(f"{'='*40}")
 
-            # 注入上下文变量到环境
             self.resolver.inject_to_env()
 
-            # 确定脚本路径
             script_path = self._resolve_script_path(step.module_id)
             if not script_path:
                 results.append({
@@ -120,7 +114,6 @@ class TestChainOrchestrator:
                 })
                 break
 
-            # 执行脚本
             module_result = self._execute_module(script_path, headed, no_heal=no_heal)
             results.append(module_result)
 
@@ -136,12 +129,10 @@ class TestChainOrchestrator:
                     print(f"❌ 模块 {step.module_id} 执行失败")
                     break
 
-            # 保存提取的变量
             self.resolver.extract_from_module_result(
                 step.module_id, str(self.output_base)
             )
 
-            # 执行 API 层断言（基于 HAR 数据）
             try:
                 from assertion.engine import ThreeLayerAssertionEngine
                 from assertion.assertion_rule import AssertionResult, AssertionStatus
@@ -156,16 +147,17 @@ class TestChainOrchestrator:
 
                     if api_calls:
                         engine = ThreeLayerAssertionEngine()
-                        # 构建默认 API 断言：检查所有业务 API 返回 200
                         api_assertions = []
                         for call in api_calls:
+                            # 使用录制时的实际状态码作为期望值，而非硬编码 200
+                            expected_status = call.status if call.status else 200
                             api_assertions.append({
                                 "layer": "api",
                                 "type": "status",
-                                "description": f"{call.method} {call.path} 返回 200",
+                                "description": f"{call.method} {call.path} 返回 {expected_status}",
                                 "url_pattern": call.path,
                                 "method": call.method,
-                                "expected": 200,
+                                "expected": expected_status,
                             })
 
                         assertion_results = engine.run_assertions(
@@ -173,7 +165,24 @@ class TestChainOrchestrator:
                             {"api_calls": api_calls}
                         )
 
-                        # 保存断言报告
+                        # 读取 UI 断言结果并合并
+                        ui_results_path = module_dir / "ui_assertion_results.json"
+                        if ui_results_path.exists():
+                            try:
+                                ui_data = json.loads(ui_results_path.read_text(encoding='utf-8'))
+                                for ui_item in ui_data:
+                                    ui_result = AssertionResult(
+                                        layer=ui_item.get("layer", "ui"),
+                                        description=ui_item.get("description", ""),
+                                        status=ui_item.get("status", "unknown"),
+                                        expected=ui_item.get("expected", ""),
+                                        actual=ui_item.get("actual", ""),
+                                        error_message=ui_item.get("error_message", ""),
+                                    )
+                                    assertion_results.append(ui_result)
+                            except Exception as e:
+                                logger.warning(f"读取 UI 断言结果失败: {e}")
+
                         assertion_report = engine.generate_report(assertion_results)
                         report_path = module_dir / "assertion_report.json"
                         report_path.write_text(
@@ -181,28 +190,45 @@ class TestChainOrchestrator:
                             encoding='utf-8',
                         )
 
-                        # 打印断言摘要
-                        passed = sum(1 for r in assertion_results if r.status == AssertionStatus.PASSED)
-                        failed = sum(1 for r in assertion_results if r.status == AssertionStatus.FAILED)
-                        print(f"   📊 API 断言: {passed}/{len(assertion_results)} 通过, {failed} 失败")
+                        # 分别统计 UI 和 API 断言
+                        ui_results = [r for r in assertion_results if r.layer == "ui"]
+                        api_results = [r for r in assertion_results if r.layer == "api"]
+                        
+                        ui_passed = sum(1 for r in ui_results if r.status == AssertionStatus.PASSED)
+                        ui_failed = sum(1 for r in ui_results if r.status == AssertionStatus.FAILED)
+                        api_passed = sum(1 for r in api_results if r.status == AssertionStatus.PASSED)
+                        api_failed = sum(1 for r in api_results if r.status == AssertionStatus.FAILED)
+                        
+                        passed = ui_passed + api_passed
+                        failed = ui_failed + api_failed
+                        
+                        print(f"   📊 断言统计:")
+                        if ui_results:
+                            print(f"      UI 断言: {ui_passed}/{len(ui_results)} 通过, {ui_failed} 失败")
+                        if api_results:
+                            print(f"      API 断言: {api_passed}/{len(api_results)} 通过, {api_failed} 失败")
+                        print(f"      总计: {passed}/{len(assertion_results)} 通过, {failed} 失败")
 
                         if failed > 0:
                             for r in assertion_results:
                                 if r.status == AssertionStatus.FAILED:
-                                    print(f"      ❌ {r.description}: 期望 {r.expected}, 实际 {r.actual}")
+                                    print(f"      ❌ [{r.layer.upper()}] {r.description}: 期望 {r.expected}, 实际 {r.actual}")
 
                         module_result["assertion_summary"] = {
                             "total": len(assertion_results),
                             "passed": passed,
                             "failed": failed,
+                            "ui_passed": ui_passed,
+                            "ui_failed": ui_failed,
+                            "api_passed": api_passed,
+                            "api_failed": api_failed,
                         }
             except Exception as e:
-                print(f"   ⚠️ API 断言执行异常: {e}")
-                logger.warning("API 断言执行异常: %s", e)
+                print(f"   ⚠️ 断言执行异常: {e}")
+                logger.warning("断言执行异常: %s", e)
 
             print(f"✅ 模块 {step.module_id} 执行成功")
 
-        # 5. 生成编排报告
         chain_success = all(r.get("success") for r in results)
         healed_count = sum(1 for r in results if r.get("healed"))
         report = {
@@ -247,11 +273,7 @@ class TestChainOrchestrator:
     def _check_heal_result(self, module_id: str) -> Optional[List[Dict[str, str]]]:
         """检查 heal_report.json 判断自动修复是否成功
 
-        方案A: 子进程 pytest 结束后，conftest 的 pytest_sessionfinish hook
-        会触发 strategy repair，若修复成功会回写源码并记录到 heal_log.json。
-        同时 heal_report.json 的 failure 条目保存了失败现场。
-
-        本方法通过读取 heal_log.json（修复日志）判断是否有成功修复条目。
+        # 查 heal_log.json 看有没有修复成功的记录
 
         Args:
             module_id: 模块标识
@@ -286,9 +308,9 @@ class TestChainOrchestrator:
                 if archive_files:
                     with open(archive_files[0], "r", encoding="utf-8") as f:
                         report = json.load(f)
-                    # heal_report 本身记录的是失败现场，无法直接判断修复是否成功
-                    # 但如果 strategy repair 流程正常走完，heal_log.json 应该存在
-                    # 此处仅作兜底日志
+                    """heal_report 本身记录的是失败现场，无法直接判断修复是否成功
+                    但如果 strategy repair 流程正常走完，heal_log.json 应该存在
+                    此处仅作兜底日志"""
                     failures = report.get("failures", [])
                     logger.info("归档报告包含 %d 条失败记录（仅供参考）", len(failures))
             except Exception:
@@ -300,12 +322,10 @@ class TestChainOrchestrator:
         """查找模块的可执行脚本"""
         module_dir = self.output_base / module_id
 
-        # 优先使用增强脚本
         enhanced = module_dir / "enhanced_script.py"
         if enhanced.exists():
             return str(enhanced)
 
-        # 回退到原始脚本
         raw = module_dir / "raw_script.py"
         if raw.exists():
             return str(raw)
@@ -333,7 +353,7 @@ class TestChainOrchestrator:
         if headed:
             cmd.append("--headed")
 
-        # 自愈参数：默认启用 SMART 策略 + 源码回写
+        # 默认开启自愈
         if not no_heal:
             cmd.extend([
                 "--ph-strategy=SMART",

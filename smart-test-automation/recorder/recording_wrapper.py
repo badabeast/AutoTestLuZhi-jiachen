@@ -233,8 +233,54 @@ class TwoStepRecorder:
             except Exception as e:
                 print(f"   ⚠️ HAR 解析失败: {e}")
 
-        # Step 4: AI 分析
-        ai_analysis = self._smart_analyze(module_name, operations, api_calls)
+        # Step 4: 参数传递链分析 + AI校验
+        param_chains = []
+        api_timeline_mappings = []
+        if api_calls:
+            try:
+                from api_test_generator import ParamChainAnalyzer, ParamChainReviewer, TimelineMapper, UIOperation
+
+                # 4a. 时间线映射：UI操作 → API调用
+                ui_ops = [
+                    UIOperation(
+                        step_index=op.step_index, action=op.action,
+                        selector_type=op.selector_type, selector_value=op.selector_value,
+                        selector_name=op.selector_name, value=op.value, raw_line=op.raw_line,
+                    )
+                    for op in operations
+                ]
+                mapper = TimelineMapper()
+                api_timeline_mappings = mapper.map_operations_to_apis(ui_ops, api_calls)
+
+                # 4b. 规则引擎：响应→请求参数传递链
+                analyzer = ParamChainAnalyzer()
+                param_chains = analyzer.analyze_chains(api_calls)
+                print(f"   参数传递链（规则）: {len(param_chains)} 条")
+
+                # 4b2. 跨模块依赖推断
+                try:
+                    from knowledge import list_modules, load_module_definition
+                    existing_modules = {}
+                    for mod_name in list_modules():
+                        if mod_name != module_name:
+                            mod_def = load_module_definition(mod_name)
+                            if mod_def:
+                                existing_modules[mod_name] = mod_def
+                    if existing_modules:
+                        cross_chains = analyzer.analyze_cross_module_chains(
+                            module_name, api_calls, existing_modules
+                        )
+                        param_chains.extend(cross_chains)
+                        print(f"   跨模块依赖: {len(cross_chains)} 条")
+                except Exception as e:
+                    print(f"   ⚠️ 跨模块依赖推断失败: {e}")
+
+                # 4c. AI 兜底校验
+                reviewer = ParamChainReviewer()
+                param_chains = reviewer.review(ui_ops, api_calls, param_chains)
+                print(f"   参数传递链（最终）: {len(param_chains)} 条")
+            except Exception as e:
+                print(f"   ⚠️ 参数链分析失败: {e}")
 
         # Step 5: 生成增强脚本 + PO 分层
         enhanced_script = output_dir / "enhanced_script.py"
@@ -243,7 +289,6 @@ class TwoStepRecorder:
                 input_path=str(raw_script),
                 output_path=str(enhanced_script),
                 module_name=module_name,
-                extract_vars=ai_analysis.get("extract_vars", []),
             )
             ts5 = datetime.now().strftime("%Y%m%d_%H%M%S")
             versioned_enhanced = output_dir / f"enhanced_script_{ts5}.py"
@@ -265,6 +310,22 @@ class TwoStepRecorder:
             print(f"   ⚠️ 增强脚本转换失败: {e}")
             enhanced_script = None
             po_result = {}
+
+        # Step 5.1: 生成接口自动化测试脚本
+        api_test_script = None
+        if api_calls and api_timeline_mappings:
+            try:
+                from api_test_generator import TestScriptGenerator
+                generator = TestScriptGenerator()
+                api_test_script = output_dir / "api_test.py"
+                script_content = generator.generate_test(
+                    module_name, api_timeline_mappings, param_chains
+                )
+                api_test_script.write_text(script_content, encoding='utf-8')
+                print(f"   接口测试脚本: {api_test_script} ({len(script_content)} 字符)")
+            except Exception as e:
+                print(f"   ⚠️ 接口测试脚本生成失败: {e}")
+                api_test_script = None
 
         # Step 5.5: 自动生成 API 断言报告（基于 HAR 数据）
         if api_calls:
@@ -291,13 +352,15 @@ class TwoStepRecorder:
                 
                 # 对所有重要的业务API生成断言（不再限制数量）
                 for call in important_apis:
+                    # 使用录制时的实际状态码作为期望值
+                    expected_status = call.status if call.status else 200
                     api_assertions.append({
                         "layer": "api",
                         "type": "status",
-                        "description": f"{call.method} {call.path} 返回 200",
+                        "description": f"{call.method} {call.path} 返回 {expected_status}",
                         "url_pattern": call.path,
                         "method": call.method,
-                        "expected": 200,
+                        "expected": expected_status,
                     })
 
                 assertion_results = engine.run_assertions(
@@ -328,6 +391,7 @@ class TwoStepRecorder:
             "api_har": str(api_har) if har_exists else None,
             "trace": str(trace_file) if trace_exists else None,
             "enhanced_script": str(enhanced_script) if enhanced_script and enhanced_script.exists() else None,
+            "api_test_script": str(api_test_script) if api_test_script and api_test_script.exists() else None,
             "po_layers": po_result if po_result else None,
             "operations": [
                 {
@@ -353,7 +417,19 @@ class TwoStepRecorder:
                 }
                 for c in api_calls
             ],
-            "smart_analysis": ai_analysis,
+            "param_chains": [
+                {
+                    "source_api": c.source_api,
+                    "source_field": c.source_field,
+                    "source_example": c.source_example,
+                    "target_api": c.target_api,
+                    "target_field": c.target_field,
+                    "chain_type": c.chain_type,
+                    "confidence": c.confidence,
+                }
+                for c in param_chains
+            ],
+            "extract_vars": self._extract_vars_from_chains(param_chains),
         }
 
         summary_path = output_dir / "recording_summary.json"
@@ -375,6 +451,15 @@ class TwoStepRecorder:
         print(f"   产物目录: {output_dir}")
 
         return module_def
+
+    @staticmethod
+    def _extract_vars_from_chains(chains) -> list:
+        """从参数传递链中提取可提取变量（兼容旧 extract_vars 格式）"""
+        try:
+            from api_test_generator.param_chain_analyzer import ParamChainAnalyzer
+            return ParamChainAnalyzer.extract_vars_from_chains(chains)
+        except Exception:
+            return []
 
     def replay(self, module_name: str, headless: bool = False) -> Optional[Dict]:
         """重放已有 raw_script，重新抓 HAR 和 Trace（跳过 codegen）"""
@@ -571,212 +656,6 @@ class TwoStepRecorder:
         preprocessed = output_dir / "_preprocessed.py"
         preprocessed.write_text(source, encoding='utf-8')
         return preprocessed
-
-    def _smart_analyze(
-        self,
-        module_name: str,
-        operations: list,
-        api_calls: list,
-    ) -> Dict[str, Any]:
-        """AI 分析：从响应里提取变量、推断模块间依赖"""
-        analysis: Dict[str, Any] = {
-            "extract_vars": [],
-            "dependencies": [],
-        }
-
-        if not api_calls:
-            return analysis
-
-        # 从响应里找 ID 类字段，这些通常是可提取的变量
-        for call in api_calls:
-            resp = call.response_body
-            if not isinstance(resp, dict):
-                continue
-            ids = self._extract_ids_from_response(resp)
-            for field_path, value in ids.items():
-                # 过滤掉无意义的短ID和过长的值
-                str_value = str(value)
-                if len(str_value) < 3 or len(str_value) > 200:
-                    continue
-                # 优先保留包含业务含义的字段（如 demand_id, order_no 等）
-                var_name = f"{module_name}_{field_path.replace('.', '_').replace('[', '_').replace(']', '')}"
-                analysis["extract_vars"].append({
-                    "name": var_name,
-                    "from_api": f"{call.method} {call.path}",
-                    "from_field": field_path,
-                    "example_value": str_value[:100],
-                })
-        
-        # 限制可提取变量数量，避免过多（最多保留50个最有价值的）
-        if len(analysis["extract_vars"]) > 50:
-            # 按字段名长度排序，优先保留语义明确的字段
-            analysis["extract_vars"] = sorted(
-                analysis["extract_vars"],
-                key=lambda x: len(x["from_field"]),
-                reverse=True
-            )[:50]
-
-        # 4b. 从请求体里推断这个模块需要啥外部参数
-        for call in api_calls:
-            body = call.request_body
-            if not isinstance(body, dict):
-                continue
-            params = self._extract_params_from_request(body)
-            for p in params:
-                analysis["input_params"] = analysis.get("input_params", [])
-                analysis["input_params"].append({
-                    "field": p["field"],
-                    "value": p["value"],
-                    "from_api": f"{call.method} {call.path}",
-                })
-
-        # 4c. 试着让 AI 推断一下依赖关系
-        try:
-            from scheduler.smart_inference import CrossModuleInferencer
-            inferencer = CrossModuleInferencer()
-            inferred_deps = inferencer.infer_all()
-            for dep in inferred_deps:
-                analysis["dependencies"].append({
-                    "from_sequence": dep.get("from_sequence"),
-                    "from_field": dep.get("from_field"),
-                    "to_sequence": dep.get("to_sequence"),
-                    "to_field": dep.get("to_field"),
-                    "confidence": dep.get("confidence", 0.9),
-                    "reasoning": dep.get("reasoning", ""),
-                    "source": "ai",
-                })
-        except Exception:
-            pass
-
-        # 4d. 跟已有的模块比对一下，看看有没有依赖
-        try:
-            from knowledge import list_modules, load_module_definition
-            existing_modules = list_modules()
-            for existing_name in existing_modules:
-                if existing_name == module_name:
-                    continue
-                existing_def = load_module_definition(existing_name)
-                if not existing_def:
-                    continue
-                dep = self._infer_dependency(module_name, api_calls, existing_name, existing_def)
-                if dep:
-                    dep["source"] = "cross_module"
-                    analysis["dependencies"].append(dep)
-        except Exception:
-            pass
-
-        if analysis["extract_vars"]:
-            print(f"   可提取变量: {len(analysis['extract_vars'])} 个")
-        if analysis.get("dependencies"):
-            print(f"   推断依赖: {len(analysis['dependencies'])} 个")
-
-        return analysis
-
-    def _extract_ids_from_response(
-        self, data: Any, prefix: str = "", max_depth: int = 5
-    ) -> Dict[str, Any]:
-        """从响应数据里挖 ID 类的字段"""
-        if max_depth <= 0:
-            return {}
-
-        ids = {}
-        # 常见的 ID 关键字
-        id_keywords = {"id", "Id", "ID", "uuid", "code", "no", "number", "seq"}
-
-        if isinstance(data, dict):
-            for key, value in data.items():
-                path = f"{prefix}.{key}" if prefix else key
-                if any(kw in key for kw in id_keywords) and value:
-                    if isinstance(value, (str, int)) and len(str(value)) < 100:
-                        ids[path] = value
-                if isinstance(value, dict):
-                    ids.update(self._extract_ids_from_response(value, path, max_depth - 1))
-                elif isinstance(value, list) and value:
-                    for i, item in enumerate(value[:3]):  # 翻前几个就够了
-                        if isinstance(item, dict):
-                            ids.update(
-                                self._extract_ids_from_response(item, f"{path}[{i}]", max_depth - 1)
-                            )
-        return ids
-
-    @staticmethod
-    def _truncate_for_inference(data: Any, max_str_len: int = 500, max_list: int = 10, depth: int = 0) -> Any:
-        """砍掉太大的数据，别撑爆 AI prompt"""
-        if depth > 5:
-            return "...(截断)"
-        if isinstance(data, dict):
-            return {k: TwoStepRecorder._truncate_for_inference(v, max_str_len, max_list, depth + 1)
-                    for k, v in data.items()}
-        if isinstance(data, list):
-            if len(data) > max_list:
-                items = [TwoStepRecorder._truncate_for_inference(i, max_str_len, max_list, depth + 1)
-                         for i in data[:max_list]]
-                items.append(f"...(共{len(data)}项)")
-                return items
-            return [TwoStepRecorder._truncate_for_inference(i, max_str_len, max_list, depth + 1)
-                    for i in data]
-        if isinstance(data, str) and len(data) > max_str_len:
-            return data[:max_str_len] + "...(截断)"
-        return data
-
-    def _extract_params_from_request(self, data: Any, prefix: str = "", max_depth: int = 4) -> List[Dict]:
-        """把请求体里的参数名和值捞出来"""
-        params = []
-        id_keywords = {"id", "Id", "ID", "uuid", "code"}
-
-        if max_depth <= 0 or not isinstance(data, dict):
-            return params
-
-        for key, value in data.items():
-            path = f"{prefix}.{key}" if prefix else key
-            if any(kw in key for kw in id_keywords) and value:
-                params.append({"field": path, "value": str(value)[:100]})
-            if isinstance(value, dict):
-                params.extend(self._extract_params_from_request(value, path, max_depth - 1))
-        return params
-
-    def _infer_dependency(
-        self,
-        current_module: str,
-        current_api_calls: list,
-        existing_module_name: str,
-        existing_module_def: Dict,
-    ) -> Optional[Dict]:
-        """看看当前模块是不是依赖了某个已有模块的输出"""
-        existing_vars = existing_module_def.get("smart_analysis", {}).get("extract_vars", [])
-        if not existing_vars:
-            return None
-
-        for call in current_api_calls:
-            body = call.request_body
-            if not isinstance(body, dict):
-                continue
-            # 把请求体里的值都摊平
-            request_values = self._flatten_values(body)
-            for var in existing_vars:
-                example_val = var.get("example_value", "")
-                if example_val and example_val in request_values:
-                    return {
-                        "depends_on": existing_module_name,
-                        "var_mapping": {var["name"]: var.get("from_field", "")},
-                        "confidence": 0.85,
-                        "reasoning": f"请求中包含 {existing_module_name} 的输出值",
-                    }
-        return None
-
-    @staticmethod
-    def _flatten_values(data: Any) -> List[str]:
-        """递归地把 dict 里的字符串值都捞出来"""
-        values = []
-        if isinstance(data, dict):
-            for v in data.values():
-                values.extend(TwoStepRecorder._flatten_values(v))
-        elif isinstance(data, list):
-            for v in data:
-                values.extend(TwoStepRecorder._flatten_values(v))
-        elif isinstance(data, str) and data:
-            values.append(data)
-        return values
 
     def _generate_wrapper_script(
         self,

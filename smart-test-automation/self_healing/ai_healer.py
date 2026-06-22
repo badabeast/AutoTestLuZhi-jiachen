@@ -1,10 +1,4 @@
-"""AI 兜底修复 — OpenAI 兼容协议
-
-独创性：
-1. 使用公司 AI 平台 OpenAI 兼容端点（区别于 playwright-healer 的 Anthropic 协议）
-2. 集成 DOM 裁剪优化机制，减少 token 消耗
-3. AI 输出也经过置信度打分公式修正，只有 ≥0.75 才采纳
-"""
+"""AI兜底修复，用OpenAI兼容接口调大模型。集成DOM裁剪省token，输出经置信度校验才采纳。"""
 from __future__ import annotations
 
 import json
@@ -19,7 +13,6 @@ from self_healing.dom_trimmer import DOMTrimmer
 from self_healing.candidate_evaluator import HealingCandidate
 
 
-# AI 修复 Prompt 模板
 _HEAL_PROMPT_TEMPLATE = """你是一个 Playwright 自动化测试的选择器修复专家。
 
 ## 背景
@@ -85,27 +78,23 @@ class AIHealer:
         if not self._api_key:
             return None
 
-        # Step 1: 裁剪 DOM
         trimmer = DOMTrimmer(self._page)
         dom_snapshot = trimmer.trim(selector, page_url)
 
         if not dom_snapshot:
             dom_snapshot = "<!-- DOM capture failed, using empty snapshot -->"
 
-        # Step 2: 构建 Prompt
         prompt = _HEAL_PROMPT_TEMPLATE.format(
             selector=selector,
             action=action,
             dom_snapshot=dom_snapshot[:8000],  # 安全上限
         )
 
-        # Step 3: 调用 AI
         try:
             response_text = self._call_ai(prompt)
             if not response_text:
                 return None
 
-            # Step 4: 解析 AI 输出
             result = self._parse_ai_response(response_text)
             if not result or result.get("healed_selector") == "CANNOT_FIX":
                 return None
@@ -114,7 +103,6 @@ class AIHealer:
             confidence = float(result.get("confidence", 0.5))
             reason = result.get("reason", "")
 
-            # Step 5: 验证修复后的选择器
             if self._verify_selector(healed):
                 return HealingCandidate(
                     selector=healed,
@@ -205,16 +193,6 @@ class AIHealer:
         return None
 
     def _verify_selector(self, selector: str) -> bool:
-        """验证修复后的选择器是否能定位到元素
-
-        将选择器字符串解析为 Playwright Locator 并检查是否能找到元素。
-
-        Args:
-            selector: 选择器字符串
-
-        Returns:
-            True 表示选择器有效且能定位到至少一个元素
-        """
         try:
             expr = parse_selector(selector)
             locator = None

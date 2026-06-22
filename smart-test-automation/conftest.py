@@ -20,26 +20,24 @@ import traceback
 
 import pytest
 
+from typing import Optional
+
 from config.env_loader import load_env
 
 # 加载 .env（统一工具函数，支持引号和注释）
 load_env()
 
-# 导入通用定位错误异常
 from core.locator_error import LocatorActionError
-# 导入全局错误捕获层
 from self_healing.monkey_patch_page import MonkeyPatchPage
 
 
-# 自愈错误报告文件路径
 HEAL_REPORT_PATH = os.path.join(os.path.dirname(__file__), "output", "heal_report.json")
 
 
-# ── 同步 healing_page fixture ──────────────────────────────────
-# 直接使用 playwright 同步 API，不依赖 asyncio 桥接
+# healing_page fixture
 
 @pytest.fixture
-def healing_page(page, healing_config, request):
+def healing_page(page, request):
     """全局错误捕获层 — 包装 page 为 MonkeyPatchPage
 
     MonkeyPatchPage 拦截所有定位方法（get_by_role/get_by_text/locator等），
@@ -49,8 +47,6 @@ def healing_page(page, healing_config, request):
     """
     return MonkeyPatchPage(page)
 
-
-# LiteReport 截图辅助函数
 
 def screenshot(page, request, label=""):
     """捕获一步截图并附加到 LiteReport 报告
@@ -70,23 +66,12 @@ def screenshot(page, request, label=""):
         print(f"\n[SCREENSHOT] 截图失败: {e}")
 
 
-# healer 自愈配置
-
-@pytest.fixture(scope="session")
-def healing_config():
-    """healer 配置：复用 self_healing/healer_config.py 的统一配置"""
-    from self_healing.healer_config import get_healer_config
-    return get_healer_config()
-
-
-# 登录态 Cookie 清洗工具
-
-def _sanitize_storage_state(storage_state_path: str) -> str | None:
+def _sanitize_storage_state(storage_state_path: str) -> Optional[str]:
     """加载 storage_state.json，清洗 expires=-1 的 session cookie 后写回。
 
     Playwright 在新浏览器 context 中会忽略 expires=-1 的 cookie，
-    导致关键的 SESSION/SSOSESSION 等认证 cookie 丢失。
-    修复策略：将 expires=-1 改为 7 天后的 Unix 时间戳。
+    导致关键的 SESSION/SSOSESSION 等认证 cookie 丢失，
+    所以把 expires=-1 改为 7 天后的时间戳。
 
     Args:
         storage_state_path: storage_state.json 文件路径
@@ -140,8 +125,6 @@ def _sanitize_storage_state(storage_state_path: str) -> str | None:
     return storage_state_path
 
 
-# 浏览器上下文配置
-
 @pytest.fixture(scope="session")
 def browser_context_args(browser_context_args, playwright):
     """全局浏览器上下文配置：带登录态、忽略 HTTPS、允许本地网络
@@ -163,8 +146,6 @@ def browser_context_args(browser_context_args, playwright):
         print("[LOGIN] 测试将依赖 BasePage._check_and_handle_login 自动登录")
     return args
 
-
-# 登录态健康检查
 
 @pytest.fixture(scope="session")
 def login_state_health_check(browser_context_args):
@@ -223,8 +204,6 @@ def login_state_health_check(browser_context_args):
 
     return {"status": "expired" if has_expired else "ok", "auth_status": auth_status}
 
-
-# 测试报告 Hooks
 
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_makereport(item, call):
@@ -285,42 +264,25 @@ def pytest_runtest_makereport(item, call):
 def _collect_locator_errors(item, call, report, screenshot_path: str):
     """从测试失败的异常链中提取 LocatorActionError，写入 JSON 报告
 
-    JSON 报告格式:
-    {
-      "timestamp": "...",
-      "failures": [
-        {
-          "test_name": "test_xxx",
-          "category": "locator",       # locator / assertion / env / unknown
-          "action": "click",
-          "selector": ".btn-entrance",
-          "page_url": "https://...",
-          "file": "create_demand_page.py",
-          "line": 156,
-          "screenshot": "output/screenshots/xxx.png",
-          "error_message": "Timeout 5000ms exceeded..."
-        }
-      ]
-    }
+    Args:
+        item: pytest item
+        call: pytest call
+        report: pytest report
+        screenshot_path: 截图文件路径
     """
     if not call.excinfo:
         return
 
-    # 从异常链中找 LocatorActionError
     exc = call.excinfo.value
     locator_error = None
 
-    # 检查异常本身
     if _is_locator_error(exc):
         locator_error = exc
-    # 检查 __cause__ 链（from e 链式异常）
     elif exc.__cause__ and _is_locator_error(exc.__cause__):
         locator_error = exc.__cause__
-    # 检查 __context__ 链
     elif exc.__context__ and _is_locator_error(exc.__context__):
         locator_error = exc.__context__
 
-    # 分类错误
     if locator_error:
         category = "locator"
     elif isinstance(exc, AssertionError) or "AssertionError" in type(exc).__name__:
@@ -357,13 +319,11 @@ def _collect_locator_errors(item, call, report, screenshot_path: str):
         tb_text = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
         selector = _extract_selector_from_traceback(tb_text)
 
-    # 如果存在 page fixture 且 page_url 为空，尝试从 fixture 提取
     if not page_url and "page" in item.funcargs:
         try:
             page_url = item.funcargs["page"].url or ""
         except Exception:
             pass
-    # 也尝试从 healing_page fixture 提取（MonkeyPatchPage 包装的 page）
     if not page_url and "healing_page" in item.funcargs:
         try:
             hp = item.funcargs["healing_page"]
@@ -373,7 +333,6 @@ def _collect_locator_errors(item, call, report, screenshot_path: str):
         except Exception:
             pass
 
-    # 构建报告条目
     entry = {
         "test_name": item.name,
         "category": category,
@@ -386,7 +345,6 @@ def _collect_locator_errors(item, call, report, screenshot_path: str):
         "error_message": str(exc)[:500],
     }
 
-    # 写入 JSON 报告（追加模式）
     _append_heal_report(entry)
 
 
@@ -498,12 +456,10 @@ def _append_heal_report(entry: dict):
         except Exception:
             pass
 
-    # 追加
     import datetime
     report["timestamp"] = datetime.datetime.now().isoformat()
     report["failures"].append(entry)
 
-    # 写回
     try:
         with open(HEAL_REPORT_PATH, "w", encoding="utf-8") as f:
             json.dump(report, f, ensure_ascii=False, indent=2)
@@ -521,8 +477,6 @@ def _append_heal_report(entry: dict):
     if entry["selector"]:
         print(f"   selector={entry['selector']!r} action={entry['action']}")
 
-
-# 自动自愈触发
 
 def pytest_sessionfinish(session, exitstatus):
     """测试 session 结束后：使用回退优先级策略层处理所有失败类型

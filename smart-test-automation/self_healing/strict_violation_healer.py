@@ -36,10 +36,10 @@ class StrictViolationHealer:
     生成收窄后的候选选择器。
     """
 
-    # 匹配 Playwright strict violation 错误中的 "aka" 提示行
-    # 格式: "    1) <a class="doraemon-search-toggle-btn">…</a> aka locator("form").get_by_text("展开")"
-    #  或: "    2) <a class="doraemon-search-toggle-btn">…</a> aka get_by_text("展开").nth(1)"
-    # 注意：HTML 片段可能包含闭合标签如 </a>，所以用 <.+?> 匹配
+    """匹配 Playwright strict violation 错误中的 "aka" 提示行
+    格式: "    1) <a class="doraemon-search-toggle-btn">…</a> aka locator("form").get_by_text("展开")"
+     或: "    2) <a class="doraemon-search-toggle-btn">…</a> aka get_by_text("展开").nth(1)"
+    注意：HTML 片段可能包含闭合标签如 </a>，所以用 <.+?> 匹配"""
     _AKA_PATTERN = re.compile(
         r'\s*(\d+)\)\s*<.+?>\s+aka\s+(.+?)$',
         re.MULTILINE,

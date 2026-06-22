@@ -838,9 +838,9 @@ class BasePage:
             value_overrides = {}
         self._value_overrides = value_overrides
 
-        # 策略1: doraemon form-item 结构扫描（只填必填项）
-        # 优先用 .doraemon-form-item-required class 识别必填（伪元素星号不在 text_content 里）
-        # 兜底用文本 * 匹配
+        """策略1: doraemon form-item 结构扫描（只填必填项）
+        优先用 .doraemon-form-item-required class 识别必填（伪元素星号不在 text_content 里）
+        兜底用文本 * 匹配"""
         required_label_els = []
         # 方式1: 通过 required class 定位（只取可见的）
         for el in self.page.locator(".doraemon-form-item-required").all():

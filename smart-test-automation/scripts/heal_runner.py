@@ -277,43 +277,20 @@ def run_healer_sync(
     Returns:
         自愈成功返回修复后的选择器，失败返回 None
     """
-    from playwright_healer.config import HealerConfig, HealingStrategy
-    from playwright_healer.ai_providers import AIProviderConfig, AIProvider
+    # playwright-healer 已移除，使用本地 healer_config 替代
+    try:
+        from self_healing.healer_config import HealerConfig, get_healer_config
+        config = get_healer_config(strategy="SMART", auto_patch_source=True, patch_source_backup=True)
+    except ImportError:
+        print("❌ 需要 healer_config 模块")
+        return None
+    # get_healer_config 已在上方调用，直接使用 config 对象
 
-    # 构建 healer 配置（统一使用 AI_API_KEY / AI_BASE_URL / AI_MODEL）
-    ai_key = (
-        os.environ.get("AI_API_KEY", "")
-        or os.environ.get("ANTHROPIC_AUTH_TOKEN", "")
-    )
-    api_url = (
-        os.environ.get("AI_BASE_URL", "")
-        or os.environ.get("ZCY_HEALER_API_URL", "")
-        or "https://ai-platform.cai-inc.com/api/biz-ai/ai-model/api/11/compatible-mode/v1"
-    )
-    model = (
-        os.environ.get("AI_MODEL", "")
-        or os.environ.get("ZCY_HEALER_MODEL", "")
-        or "glm-5.1"
-    )
-
-    config = HealerConfig(
-        providers=[
-            AIProviderConfig(
-                provider=AIProvider.OPENAI,
-                api_key=ai_key,
-                model=model,
-                api_url=api_url,
-            )
-        ] if ai_key else [],
-        strategy=HealingStrategy(os.environ.get("PH_STRATEGY", "SMART")),
-        prefer_aria=os.environ.get("PH_PREFER_ARIA", "true").lower() == "true",
-        auto_patch_source=True,
-        patch_source_backup=True,
-    )
 
     async def _heal():
         from playwright.async_api import async_playwright
-        from playwright_healer.pipeline import HealingPipeline
+        # playwright-healer 已移除，使用本地五层引擎
+        from self_healing.pipeline import HealingPipeline
 
         async with async_playwright() as p:
             browser = await p.chromium.launch(

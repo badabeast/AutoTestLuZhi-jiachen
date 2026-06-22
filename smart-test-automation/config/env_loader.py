@@ -71,6 +71,8 @@ def _apply_env_override():
             "STAGING_WEB_DEMAND_URL": "WEB_DEMAND_URL",
             "STAGING_WEB_DEMAND_ACCOUNT": "WEB_DEMAND_ACCOUNT",
             "STAGING_WEB_DEMAND_PASSWORD": "WEB_DEMAND_PASSWORD",
+            "STAGING_WEB_DEMAND_LOGIN_PAGE_URL": "WEB_DEMAND_LOGIN_PAGE_URL",
+            "STAGING_WEB_DEMAND_LOGIN_DOMAINS": "WEB_DEMAND_LOGIN_DOMAINS",
         }
         for staging_key, standard_key in mappings.items():
             val = os.environ.get(staging_key)

@@ -42,10 +42,7 @@ from typing import Dict, List, Optional, Any, Callable
 logger = logging.getLogger(__name__)
 
 
-# 枚举定义
-
 class FailureCategory(str, Enum):
-    # 失败分类
     LOCATOR_TIMEOUT = "locator_timeout"        # 选择器超时（元素找不到）
     LOCATOR_STRICT = "locator_strict"          # strict mode violation（多个匹配）
     LOCATOR_DETACHED = "locator_detached"      # 元素已脱离 DOM
@@ -62,7 +59,6 @@ class FailureCategory(str, Enum):
 
 
 class RepairStrategy(str, Enum):
-    # 修复策略
     PATCH_SCRIPT = "patch_script"         # 直接改脚本
     REPLAY_VERIFY = "replay_verify"       # 回放复现
     RE_RECORD = "re_record"               # 重新录制
@@ -71,18 +67,15 @@ class RepairStrategy(str, Enum):
 
 
 class StrategyPriority(int, Enum):
-    # 策略优先级（数字越小越优先）
     P0_IMMEDIATE = 0    # 立即执行（成功率高、成本低）
     P1_RETRY = 1        # 重试（可能成功）
     P2_FALLBACK = 2     # 回退方案（成本较高）
     P3_MANUAL = 3       # 需要人工介入
 
 
-# 定义数据结构
 
 @dataclass
 class FailureEntry:
-    # 失败记录：从 conftest.py 的 heal_report.json 来
     test_name: str
     category: str
     sub_category: FailureCategory = FailureCategory.UNKNOWN
@@ -116,7 +109,6 @@ class FailureEntry:
 
 @dataclass
 class RepairDecision:
-    # 修复决策
     strategy: RepairStrategy
     priority: StrategyPriority
     score: float                         # 0.0 ~ 1.0，评估分数
@@ -137,7 +129,7 @@ class RepairDecision:
 
 @dataclass
 class RepairResult:
-     # 修复结果
+    # 修复结果
     strategy: RepairStrategy
     success: bool
     old_value: str = ""       # 修复前的值
@@ -160,12 +152,10 @@ class RepairResult:
         }
 
 
-# 失败分类器
 
 class FailureClassifier:
 
-    # 错误消息关键词 → 细分类映射
-    # 注意：列表顺序即优先级，先匹配到的生效
+    # 先匹配到的生效
     _PATTERNS: List[tuple] = [
         ("strict mode violation", FailureCategory.LOCATOR_STRICT),
         ("matches multiple", FailureCategory.LOCATOR_STRICT),
@@ -219,7 +209,6 @@ class FailureClassifier:
 
     @classmethod
     def classify(cls, entry: FailureEntry) -> FailureCategory:
-        # 基于错误消息和原始分类进行分类
         error_msg = entry.error_message or ""
         original_cat = entry.category or ""
 
@@ -264,7 +253,6 @@ class FailureClassifier:
 
 
 def _match(pattern: str, text: str) -> bool:
-    # 简单的关键词正则匹配
     import re
     try:
         return bool(re.search(pattern, text, re.IGNORECASE))
@@ -272,20 +260,8 @@ def _match(pattern: str, text: str) -> bool:
         return pattern.lower() in text.lower()
 
 
-"""# ─────────────────────────────────────────────────────────────
-# 决策引擎
-
-# 决策规则表：(sub_category, 已重试次数) → (策略, 优先级, 评估分数, 理由, 回退链)
-
- 修复策略说明：
-   选择器问题  → healer 自动修，修不了就回放确认，还不行就重录
-   断言失败    → 可能是接口 bug 也可能是脚本问题，先回放确认能复现再判断
-   网络问题    → 重试，最多 3 次，都不行就跳过
-   登录态失效  → 执行 login/auto_login.py 自动刷新，刷新失败就跳过
-   流程变化    → 不自动处理，标记跳过 + 输出提示等人工确认
-   功能下线    → 直接跳过，等人工确认要不要删用例"""
+# 选择器问题→healer修→回放确认→重录；断言→先回放确认复现再判断；网络→重试3次；登录态→跑auto_login；流程变化→跳过等人工
 _DECISION_RULES: Dict[FailureCategory, List[Dict]] = {
-    #  选择器问题
     FailureCategory.LOCATOR_TIMEOUT: [
         {"max_retry": 0, "strategy": RepairStrategy.PATCH_SCRIPT,
          "priority": StrategyPriority.P0_IMMEDIATE, "score": 0.80,
@@ -315,11 +291,7 @@ _DECISION_RULES: Dict[FailureCategory, List[Dict]] = {
          "fallback": [RepairStrategy.REPLAY_VERIFY]},
     ],
 
-    # ── 断言问题 ──
-    # 断言失败有两种可能：
-    #   1. 接口返回的数据有问题（后端 bug）→ 需要提 bug
-    #   2. 脚本里的断言逻辑写错了（比如预期值过时了）→ 需要改脚本
-    # 所以先回放确认能复现，再根据情况决定
+    # 先回放确认能复现，再判断是接口问题还是脚本问题
     FailureCategory.ASSERTION_VALUE: [
         {"max_retry": 0, "strategy": RepairStrategy.REPLAY_VERIFY,
          "priority": StrategyPriority.P1_RETRY, "score": 0.60,
@@ -359,8 +331,7 @@ _DECISION_RULES: Dict[FailureCategory, List[Dict]] = {
          "fallback": [RepairStrategy.SKIP]},
     ],
 
-    # ── 流程变化 ──
-    # 不自动处理，因为流程变化需要人工判断
+    # 流程变化
     FailureCategory.FLOW_CHANGED: [
         {"max_retry": 0, "strategy": RepairStrategy.SKIP,
          "priority": StrategyPriority.P3_MANUAL, "score": 0.90,
@@ -374,7 +345,7 @@ _DECISION_RULES: Dict[FailureCategory, List[Dict]] = {
          "fallback": []},
     ],
 
-    # 兜底
+
     FailureCategory.UNKNOWN: [
         {"max_retry": 0, "strategy": RepairStrategy.REPLAY_VERIFY,
          "priority": StrategyPriority.P1_RETRY, "score": 0.40,
@@ -393,17 +364,11 @@ class StrategyDecisionEngine:
         self.decision_history: List[Dict] = []
 
     def decide(self, entry: FailureEntry) -> RepairDecision:
-        """对单个失败做出修复决策
-
-        """
-        # 1. 进行分类
         sub_cat = self.classifier.classify(entry)
         entry.sub_category = sub_cat
 
-        # 2. 查决策规则表
         rules = self.rules.get(sub_cat, self.rules[FailureCategory.UNKNOWN])
 
-        # 3. 根据已重试次数选择合适的规则
         selected = rules[0]  # 默认第一条
         for rule in rules:
             if entry.retry_count <= rule["max_retry"]:
@@ -413,7 +378,6 @@ class StrategyDecisionEngine:
             # 所有规则都超过重试次数，取最后一条
             selected = rules[-1]
 
-        # 4. 构建决策
         decision = RepairDecision(
             strategy=selected["strategy"],
             priority=selected["priority"],
@@ -423,7 +387,6 @@ class StrategyDecisionEngine:
             params=self._build_params(entry, selected["strategy"]),
         )
 
-        # 5. 记录决策历史
         self.decision_history.append({
             "test_name": entry.test_name,
             "sub_category": sub_cat.value,
@@ -438,8 +401,6 @@ class StrategyDecisionEngine:
         return decision
 
     def decide_batch(self, entries: List[FailureEntry]) -> List[tuple]:
-        # 批量决策，按优先级排序
-
         pairs = []
         for entry in entries:
             decision = self.decide(entry)
@@ -450,47 +411,9 @@ class StrategyDecisionEngine:
         return pairs
 
     def _build_params(self, entry: FailureEntry, strategy: RepairStrategy) -> Dict[str, Any]:
-        #  根据失败信息构建策略参数
-        params = {}
-
-        if strategy == RepairStrategy.PATCH_SCRIPT:
-            params["selector"] = entry.selector
-            params["page_url"] = entry.page_url
-            params["file"] = entry.file
-            params["line"] = entry.line
-            params["action"] = entry.action
-            params["error_message"] = entry.error_message
-            # 决定用哪种 patch 方式
-            if entry.sub_category.value.startswith("locator"):
-                params["patch_type"] = "healer"  # 调用 playwright-healer
-            elif entry.sub_category.value.startswith("assertion"):
-                params["patch_type"] = "ai_analysis"  # AI 分析断言逻辑
-            else:
-                params["patch_type"] = "manual"
-
-        elif strategy == RepairStrategy.REPLAY_VERIFY:
-            params["script_path"] = entry.file
-            params["headless"] = True
-            params["collect_trace"] = True
-
-        elif strategy == RepairStrategy.RE_RECORD:
-            params["module_name"] = _extract_module_name(entry)
-            params["page_url"] = entry.page_url
-
-        elif strategy == RepairStrategy.ENV_FIX:
-            if entry.sub_category == FailureCategory.ENV_AUTH:
-                params["fix_type"] = "refresh_login"
-                params["storage_state"] = "login_state/storage_state.json"
-            elif entry.sub_category == FailureCategory.ENV_NETWORK:
-                params["fix_type"] = "retry_with_backoff"
-                params["max_retries"] = 3
-            elif entry.sub_category == FailureCategory.ENV_BROWSER:
-                params["fix_type"] = "restart_browser"
-
-        return params
+        return _build_strategy_params(entry, strategy)
 
     def get_decision_summary(self) -> Dict[str, Any]:
-        # 获取决策历史摘要
         if not self.decision_history:
             return {"total": 0}
 
@@ -519,6 +442,46 @@ def _extract_module_name(entry: FailureEntry) -> str:
     return "unknown"
 
 
+def _build_strategy_params(entry: FailureEntry, strategy: RepairStrategy) -> Dict[str, Any]:
+    """根据失败信息构建策略参数（供 StrategyDecisionEngine 和 RepairExecutor 共用）"""
+    params: Dict[str, Any] = {}
+
+    if strategy == RepairStrategy.PATCH_SCRIPT:
+        params["selector"] = entry.selector
+        params["page_url"] = entry.page_url
+        params["file"] = entry.file
+        params["line"] = entry.line
+        params["action"] = entry.action
+        params["error_message"] = entry.error_message
+        if entry.sub_category.value.startswith("locator"):
+            params["patch_type"] = "healer"
+        elif entry.sub_category.value.startswith("assertion"):
+            params["patch_type"] = "ai_analysis"
+        else:
+            params["patch_type"] = "manual"
+
+    elif strategy == RepairStrategy.REPLAY_VERIFY:
+        params["script_path"] = entry.file
+        params["headless"] = True
+        params["collect_trace"] = True
+
+    elif strategy == RepairStrategy.RE_RECORD:
+        params["module_name"] = _extract_module_name(entry)
+        params["page_url"] = entry.page_url
+
+    elif strategy == RepairStrategy.ENV_FIX:
+        if entry.sub_category == FailureCategory.ENV_AUTH:
+            params["fix_type"] = "refresh_login"
+            params["storage_state"] = "login_state/storage_state.json"
+        elif entry.sub_category == FailureCategory.ENV_NETWORK:
+            params["fix_type"] = "retry_with_backoff"
+            params["max_retries"] = 3
+        elif entry.sub_category == FailureCategory.ENV_BROWSER:
+            params["fix_type"] = "restart_browser"
+
+    return params
+
+
 # 修复执行器
 
 class RepairExecutor:
@@ -529,10 +492,6 @@ class RepairExecutor:
         self.results: List[RepairResult] = []
 
     def execute(self, decision: RepairDecision, entry: FailureEntry) -> RepairResult:
-        """执行单个修复决策
-
-
-        """
         start = time.time()
         strategy = decision.strategy
         params = decision.params
@@ -566,11 +525,11 @@ class RepairExecutor:
         self.results.append(result)
         return result
 
+    # 失败自动降级
     def execute_with_fallback(
         self, decision: RepairDecision, entry: FailureEntry,
         max_attempts: int = 3,
     ) -> RepairResult:
-        #执行修复，失败时自动降级到回退链
 
         all_strategies = [decision.strategy] + decision.fallback_chain
 
@@ -606,48 +565,8 @@ class RepairExecutor:
             message=f"所有策略均失败，已尝试: {[s.value for s in all_strategies[:max_attempts]]}",
         )
 
-    # 参数构建辅助
-
     def _build_params_for_strategy(self, entry: FailureEntry, strategy: RepairStrategy) -> Dict[str, Any]:
-        """为回退策略构建合适的参数"""
-        params = {}
-
-        if strategy == RepairStrategy.PATCH_SCRIPT:
-            params["selector"] = entry.selector
-            params["page_url"] = entry.page_url
-            params["file"] = entry.file
-            params["line"] = entry.line
-            params["action"] = entry.action
-            params["error_message"] = entry.error_message
-            if entry.sub_category.value.startswith("locator"):
-                params["patch_type"] = "healer"
-            elif entry.sub_category.value.startswith("assertion"):
-                params["patch_type"] = "ai_analysis"
-            else:
-                params["patch_type"] = "manual"
-
-        elif strategy == RepairStrategy.REPLAY_VERIFY:
-            params["script_path"] = entry.file
-            params["headless"] = True
-            params["collect_trace"] = True
-
-        elif strategy == RepairStrategy.RE_RECORD:
-            params["module_name"] = _extract_module_name(entry)
-            params["page_url"] = entry.page_url
-
-        elif strategy == RepairStrategy.ENV_FIX:
-            if entry.sub_category == FailureCategory.ENV_AUTH:
-                params["fix_type"] = "refresh_login"
-                params["storage_state"] = "login_state/storage_state.json"
-            elif entry.sub_category == FailureCategory.ENV_NETWORK:
-                params["fix_type"] = "retry_with_backoff"
-                params["max_retries"] = 3
-            elif entry.sub_category == FailureCategory.ENV_BROWSER:
-                params["fix_type"] = "restart_browser"
-
-        return params
-
-    #  修复动作实现
+        return _build_strategy_params(entry, strategy)
 
     def _execute_patch(self, params: Dict, entry: FailureEntry) -> RepairResult:
         """执行脚本修复"""
@@ -681,7 +600,7 @@ class RepairExecutor:
             from self_healing.pipeline import HealingPipeline
             from playwright.sync_api import sync_playwright
 
-            # P2: 复用登录守卫，确保登录态有效
+            # 复用登录守卫，确保登录态有效
             try:
                 from login.refresh_login_state import ensure_valid_login_state
                 login_ok = ensure_valid_login_state()
@@ -746,82 +665,8 @@ class RepairExecutor:
                 message=f"五层引擎调用异常: {e}",
             )
 
-    # 向后兼容别名：旧代码中 _patch_via_healer 仍可用
+    # 旧名兼容
     _patch_via_healer = _patch_via_five_tier_engine
-
-    def _call_healer_direct(self, selector: str, page_url: str) -> Optional[str]:
-        # 【已废弃】请使用 _patch_via_five_tier_engine 替代
-        # 保留此方法以防止外部调用方直接引用时报错
-        import warnings
-        warnings.warn(
-            "_call_healer_direct 已废弃，请使用 _patch_via_five_tier_engine",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        import asyncio
-
-        async def _heal():
-            from playwright.async_api import async_playwright
-            from self_healing.healer_config import get_healer_config
-            from playwright_healer.pipeline import HealingPipeline
-
-            config = get_healer_config()
-
-            async with async_playwright() as p:
-                browser = await p.chromium.launch(
-                    headless=True,
-                    args=["--no-sandbox", "--ignore-certificate-errors"],
-                )
-
-                storage_state_path = str(self.project_root / "login_state" / "storage_state.json")
-                context_args = {
-                    "viewport": {"width": 1366, "height": 768},
-                    "ignore_https_errors": True,
-                }
-                if os.path.exists(storage_state_path):
-                    context_args["storage_state"] = storage_state_path
-
-                context = await browser.new_context(**context_args)
-                page = await context.new_page()
-
-                if page_url and page_url != "about:blank":
-                    try:
-                        await page.goto(page_url, wait_until="domcontentloaded", timeout=30000)
-                        await page.wait_for_timeout(3000)
-                    except Exception as e:
-                        logger.warning("导航失败: %s", e)
-
-                pipeline = HealingPipeline(page, config, test_name="strategy_heal")
-                try:
-                    await pipeline.find(selector, selector)
-                    for event in pipeline.session_report.events:
-                        if event.selector == selector and event.healed_selector:
-                            return event.healed_selector
-                    return None
-                finally:
-                    try:
-                        await pipeline.shutdown()
-                    except Exception:
-                        pass
-                    await browser.close()
-
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            loop = None
-
-        try:
-            if loop and loop.is_running():
-                # pytest 内部已有事件循环 → 用线程池跑
-                import concurrent.futures
-                with concurrent.futures.ThreadPoolExecutor() as pool:
-                    future = pool.submit(asyncio.run, _heal())
-                    return future.result(timeout=120)
-            else:
-                return asyncio.run(_heal())
-        except Exception as e:
-            logger.error("healer 调用失败: %s", e)
-            return None
 
     def _patch_via_ai(self, params: Dict, entry: FailureEntry) -> RepairResult:
         """通过 AI 分析修复断言逻辑
@@ -841,7 +686,6 @@ class RepairExecutor:
             "recommendations": [],
         }
 
-        # 基于错误消息生成建议
         if "expected" in error_msg.lower() and "but got" in error_msg.lower():
             suggestion["recommendations"].append(
                 "断言预期值不匹配 — 检查是否是业务数据变更导致预期值需要更新"
@@ -858,7 +702,6 @@ class RepairExecutor:
                 "建议人工审查断言逻辑，或使用回放复现收集更多信息"
             )
 
-        # 保存建议到文件
         suggestion_path = self.project_root / "output" / "repair_suggestions.json"
         suggestion_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -885,7 +728,6 @@ class RepairExecutor:
         )
 
     def _execute_replay(self, params: Dict, entry: FailureEntry) -> RepairResult:
-        # 回放验证:重跑脚本确认是否可复现
         script_path = params.get("script_path", "")
         headless = params.get("headless", True)
 
@@ -933,10 +775,7 @@ class RepairExecutor:
             )
 
     def _execute_re_record(self, params: Dict, entry: FailureEntry) -> RepairResult:
-        """触发重新录制 — 输出指令，由用户执行
-        注意：这里不自动执行录制，因为录制需要人工操作页面。
-
-        """
+        """触发重新录制 — 输出指令，由用户执行（录制需要人工操作页面）"""
         module_name = params.get("module_name", "unknown")
         page_url = params.get("page_url", "")
 
@@ -950,7 +789,6 @@ class RepairExecutor:
         )
 
     def _execute_env_fix(self, params: Dict, entry: FailureEntry) -> RepairResult:
-        # 环境修复
         fix_type = params.get("fix_type", "")
 
         if fix_type == "refresh_login":
@@ -970,7 +808,6 @@ class RepairExecutor:
             )
 
     def _fix_login(self, params: Dict, entry: FailureEntry = None) -> RepairResult:
-        # 刷新登录态 : 执行 auto_login.py 后重跑测试验证
         storage_state = params.get("storage_state", "login_state/storage_state.json")
         login_script = self.project_root / "login" / "auto_login.py"
 
@@ -1032,7 +869,6 @@ class RepairExecutor:
             )
 
     def _fix_network_retry(self, params: Dict, entry: FailureEntry) -> RepairResult:
-        # 网络重试 ： 实际执行一次重试验证
         max_retries = params.get("max_retries", 3)
         script_path = entry.file
 
@@ -1075,14 +911,11 @@ class RepairExecutor:
 
         优先从 entry.metadata 中读取，其次从输出目录查找对应页面的 DOM 快照。
         """
-        # 1. 尝试从 metadata 中获取
         if entry.metadata and "dom_schema" in entry.metadata:
             return entry.metadata["dom_schema"]
 
-        # 2. 尝试从输出目录查找 DOM 快照文件
         dom_dir = self.project_root / "output" / "dom_snapshots"
         if dom_dir.exists():
-            # 尝试根据 page_url 匹配
             import hashlib
             url_hash = hashlib.md5(entry.page_url.encode()).hexdigest() if entry.page_url else ""
             if url_hash:
@@ -1116,7 +949,6 @@ class RepairExecutor:
             return False
 
 
-# 策略编排入口
 
 
 class FailureRepairOrchestrator:
@@ -1155,14 +987,11 @@ class FailureRepairOrchestrator:
         print(f"🧠 回退优先级策略层 — 分析 {len(failures)} 个失败")
         print(f"{'='*60}")
 
-        # 2. 分类 + 决策
         entries = [FailureEntry.from_dict(f) for f in failures]
         pairs = self.engine.decide_batch(entries)
 
-        # 3. 打印决策计划
         self._print_decision_plan(pairs)
 
-        # 4. 按优先级执行修复
         results = []
         for entry, decision in pairs:
             if decision.strategy == RepairStrategy.SKIP:
@@ -1186,14 +1015,12 @@ class FailureRepairOrchestrator:
                 "result": result.to_dict(),
             })
 
-        # 5. 生成修复报告
         report = self._build_report(pairs, results)
         self._save_report(report)
 
         return report
 
     def _load_failures(self, report_path: str) -> List[Dict]:
-        # 加载失败报告
         if not os.path.exists(report_path):
             print(f"⚠️ 报告文件不存在: {report_path}")
             return []
@@ -1207,7 +1034,6 @@ class FailureRepairOrchestrator:
             return []
 
     def _print_decision_plan(self, pairs: List[tuple]):
-        # 打印决策计划
         print(f"\n📋 修复计划:")
         print(f"{'─'*60}")
 
@@ -1234,7 +1060,6 @@ class FailureRepairOrchestrator:
         pairs: List[tuple],
         results: List[Dict],
     ) -> Dict[str, Any]:
-        """构建修复报告"""
         # result 统一是 dict 格式，含 success 字段
         success_count = sum(
             1 for r in results
@@ -1251,7 +1076,6 @@ class FailureRepairOrchestrator:
         }
 
     def _save_report(self, report: Dict):
-        # 保存修复报告
         report_path = self.project_root / "output" / "strategy_repair_report.json"
         report_path.parent.mkdir(parents=True, exist_ok=True)
         report_path.write_text(

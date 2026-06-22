@@ -443,9 +443,9 @@ class DemandFormPage:
 
             label_el = label_locator.first
 
-            # 从 label 的父级 .doraemon-row 开始，搜索整个 form 区域
-            # 尝试在 form 上下文中搜索
-            # 尝试找到最近的 doraemon-row 祖先
+            """从 label 的父级 .doraemon-row 开始，搜索整个 form 区域
+            尝试在 form 上下文中搜索
+            尝试找到最近的 doraemon-row 祖先"""
             try:
                 row = label_el.locator(
                     "xpath=ancestor::div[contains(@class, 'doraemon-row')]"
@@ -949,9 +949,9 @@ class DemandFormPage:
                 product_header.first.scroll_into_view_if_needed()
                 time.sleep(0.5)
 
-            # 扫描商品信息区域的必填字段
-            # 商品信息区域的表单在表格内，可能有不同的结构
-            # 尝试自动填充
+            """扫描商品信息区域的必填字段
+            商品信息区域的表单在表格内，可能有不同的结构
+            尝试自动填充"""
             self.auto_fill_required_fields(scroll_top=False)
 
         except Exception as e:

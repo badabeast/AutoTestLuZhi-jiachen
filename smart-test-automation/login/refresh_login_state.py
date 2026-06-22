@@ -1,31 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-刷新登录态 — 用现有 storage_state 打开采购需求页面，刷新 session cookie
-
-改进说明:
-  - 登录态过期时自动尝试无头自动登录（不需要 --manual）
-  - 自动登录失败再回退到手动模式
-  - 增加 is_login_state_valid() 函数供其他模块调用检查登录态
-  - 增加 ensure_valid_login_state() 一键检查+刷新入口
-
-原理:
-  1. 用 storage_state 启动浏览器
-  2. 访问采购需求页面
-  3. 如果 session 有效 -> 页面正常加载 -> 保存刷新后的 storage_state
-  4. 如果 session 过期 -> 自动尝试无头登录 -> 保存新 storage_state
-  5. 自动登录失败 -> 需要手动登录
-
-用法:
-    python3 refresh_login_state.py
-    python3 refresh_login_state.py --manual      # 强制手动登录
-    python3 refresh_login_state.py --check-only   # 仅检查登录态是否有效
-
-编程调用:
-    from login.refresh_login_state import is_login_state_valid, ensure_valid_login_state
-    valid = is_login_state_valid()  # 快速检查
-    ensure_valid_login_state()      # 检查+自动刷新
-"""
+"""刷新登录态。用现有storage_state打开页面，session有效则保存刷新，过期则先尝试无头自动登录再回退手动。"""
 
 import sys
 import os
@@ -42,19 +17,15 @@ load_env()
 from playwright.sync_api import sync_playwright
 
 STORAGE_STATE_PATH = Path("login_state/storage_state.json")
-TARGET_URL = os.environ.get("WEB_DEMAND_URL", "https://www.test.zcygov.cn/demand_front/#/overview?_app_=zcy.demand&app=demand&pageSize=20")
-LOGIN_URL = os.environ.get("WEB_DEMAND_LOGIN_PAGE_URL", "https://login.test.zcygov.cn/user-login/#/login")
-LOGIN_DOMAINS = ["login.test.zcygov.cn", "login.staging.zcygov.cn", "login.zcygov.cn"]
+TARGET_URL = os.environ.get("WEB_DEMAND_URL", "")
+LOGIN_URL = os.environ.get("WEB_DEMAND_LOGIN_PAGE_URL", "")
+LOGIN_DOMAINS = os.environ.get("WEB_DEMAND_LOGIN_DOMAINS", "").split(",") if os.environ.get("WEB_DEMAND_LOGIN_DOMAINS") else []
 ACCOUNT = os.environ.get("WEB_DEMAND_ACCOUNT", "")
 PASSWORD = os.environ.get("WEB_DEMAND_PASSWORD", "")
 
 
 def is_login_state_valid() -> bool:
-    """快速检查 storage_state 是否存在且关键 cookie 未过期
-
-    Returns:
-        True 表示登录态可能有效（cookie 未过期），False 表示需要刷新
-    """
+    """快速检查storage_state是否存在且关键cookie未过期。"""
     if not STORAGE_STATE_PATH.exists():
         return False
 
@@ -67,7 +38,6 @@ def is_login_state_valid() -> bool:
     cookies = state.get("cookies", [])
     now = time.time()
 
-    # 检查关键认证 cookie
     auth_names = {"SESSION", "SSOSESSION"}
     found_valid = False
 
@@ -78,19 +48,12 @@ def is_login_state_valid() -> bool:
             if expires == -1 or (expires > 0 and expires > now):
                 found_valid = True
             else:
-                # 关键 cookie 已过期
                 return False
 
-    # 至少要有一个有效的认证 cookie
     return found_valid
 
 
 def _auto_login_headless() -> bool:
-    """无头自动登录（无验证码场景）
-
-    Returns:
-        True 表示登录成功，False 表示失败
-    """
     if not ACCOUNT or not PASSWORD:
         return False
 
@@ -163,7 +126,6 @@ def _auto_login_headless() -> bool:
                 browser.close()
                 return False
 
-            # 保存登录态
             new_state = context.storage_state()
             seven_days = time.time() + 7 * 24 * 3600
             for c in new_state.get("cookies", []):
@@ -225,9 +187,9 @@ def refresh_login_state(manual: bool = False) -> bool:
         print(f"\n正在访问 {TARGET_URL}...")
         page.goto(TARGET_URL, timeout=30000, wait_until="domcontentloaded")
 
-        # 关键：domcontentloaded 时 cookie 存在，页面看起来正常
-        # 但 JS 执行后可能发现服务端 session 过期而重定向到登录页
-        # 所以必须等 networkidle 再检查 URL
+        """关键：domcontentloaded 时 cookie 存在，页面看起来正常
+        但 JS 执行后可能发现服务端 session 过期而重定向到登录页
+        所以必须等 networkidle 再检查 URL"""
         initial_url = page.url
         print(f"\n domcontentloaded 时 URL: {initial_url}")
 

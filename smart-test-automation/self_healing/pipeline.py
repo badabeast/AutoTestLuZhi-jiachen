@@ -1,11 +1,4 @@
-"""五层递进式规则自愈引擎
-
-独创性：
-1. 自研5级启发式执行流水线（纯规则无AI优先执行，降低调用成本）
-2. 自研专属调度逻辑：一级缓存→二级语义→三级动态过滤→四级拓扑→五级穿透
-3. 多候选竞争评估：L1-L5可能产生多个候选，统一排序取最优
-4. 五层全部失败后才触发 LLM 大模型辅助修复
-"""
+"""五层递进规则引擎 + AI兜底。L1缓存→L2语义→L3动态过滤→L4拓扑→L5穿透，规则优先省token，全挂了再调AI。"""
 from __future__ import annotations
 
 import logging
@@ -69,7 +62,6 @@ class HealingPipeline:
         self._cache = SelectorCache(cache_dir)
         self._evaluator = CandidateEvaluator()
 
-        # 初始化五层引擎
         self._l1 = L1CacheMatcher(self._cache)
         self._l2 = L2SemanticGenerator(page)
         self._l3 = L3DynamicFilterMatcher(page)
@@ -77,15 +69,10 @@ class HealingPipeline:
         self._l5 = L5IframeShadowPatcher(page)
         self._ai = AIHealer(page)
 
-        # 注入组件库档案
         self._apply_component_profiles()
 
     def _apply_component_profiles(self) -> None:
-        """注入组件库档案到相关引擎
-
-        使用延迟导入避免循环依赖。各引擎根据自己的职责
-        应用档案中的优先级、忽略规则、权重等信息。
-        """
+        # 延迟导入，避免循环依赖
         try:
             self._l2.apply_component_profiles()
             self._l3.apply_component_profiles()
@@ -215,7 +202,6 @@ class HealingPipeline:
                 base_score=confidence,
             ))
 
-        # 评估所有候选，排序取最优
         if candidates:
             result.all_candidates = self._evaluator.rank_candidates(candidates)
             best = result.all_candidates[0]
@@ -240,7 +226,7 @@ class HealingPipeline:
                 return result
 
         # 五层全部失败，触发 AI 兜底
-        logger.info(f"[AI] 五层规则引擎全部失败，触发 LLM 大模型辅助修复")
+        logger.info("[AI] 规则引擎全挂，上AI")
         ai_candidate = self._ai.heal(selector, action, page_url)
         if ai_candidate:
             evaluated = self._evaluator.evaluate(ai_candidate)
@@ -272,19 +258,7 @@ def create_pipeline_from_browser(
     page_url: str,
     cache_dir: Optional[str] = None,
 ) -> tuple[HealingPipeline, Page]:
-    """从浏览器实例创建自愈管线（用于 post-session 修复场景）
-
-    创建新的 BrowserContext 和 Page，导航到指定 URL，
-    然后返回构建好的 HealingPipeline 和对应的 Page 实例。
-
-    Args:
-        browser: Playwright Browser 实例
-        page_url: 需要导航到的页面 URL
-        cache_dir: 缓存目录路径
-
-    Returns:
-        (HealingPipeline, Page) 元组
-    """
+    """从浏览器实例创建管线和页面，导航到指定URL"""
     context: BrowserContext = browser.new_context()
     page: Page = context.new_page()
     if page_url:
